@@ -2,4 +2,4 @@
 .pydevproject
 *.pyc
 *.log
-run-mobile.py
+run-*.py
