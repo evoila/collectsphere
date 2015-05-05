@@ -88,7 +88,7 @@ def init_callback():
         env = create_environment(config)
       
         inventory = {}
-        thread = InventoryWatchDog(env.get('conn'), inventory, 600)
+        thread = InventoryWatchDog(env.get('conn'), env, 600)
         thread.start()
 
         env['inventory'] = inventory
@@ -102,7 +102,8 @@ def read_callback():
     minimize the execution time of the function which is why a lot of caching
     is performed using the environment objects. """
 
-    # We are going to spawn a lot of threads soon to speed up metric fetching. References to the threads are stored here.
+    # We are going to spawn a lot of threads soon to speed up metric fetching.
+    # References to the threads are stored here.
     threads = []
     
     # Walk through the existing environments
@@ -128,16 +129,16 @@ def read_callback():
         # watch dog and spawn a thread for every host.
         
         host_counter_ids = env.get('host_counter_ids')
-        host_inventory = env.get('inventory').get('host_inventory')
+        inventory = env.get('inventory')
 
         # Only do this if the inventory tree is not empty. If is isn't: for
         # every host in every cluster spawn a thread.
-        if host_inventory:
-            for cluster_name in host_inventory.keys():
-                for host_name in host_inventory.get(cluster_name).get('hosts').keys():
+        if inventory:
+            for cluster_name in inventory.keys():
+                for host_name in inventory.get(cluster_name).get('hosts').keys():
                     
                     # fetch the host MOR from the inventory tree
-                    host = host_inventory.get(cluster_name).get('hosts').get(host_name)
+                    host = inventory.get(cluster_name).get('hosts').get(host_name)
                    
                     # create thread and execute
                     thread = GetMetricsThread(pm, host, host_counter_ids, name, cluster_name, host_name.split('.')[0])
@@ -249,33 +250,22 @@ def create_environment(config):
             'vm_counter_ids': [<ID>, <ID>, ...],
 
             # The inventory watch dog reponsible for this vCenter Server fills
-            # in the contents here. We store a host_inventory and a
-            # vm_inventory separately. The host_inventory contains a tree of
-            # clusters and ESXi hosts, while the vm_inventory contains clusters
-            # and virtual machines. The important part is that in addition to
-            # the names of clusters, hosts and VMs we store the MOR of the
-            # objects. Like this we can easily make an API call to fetch
-            # metrics.
+            # in the contents here. The inventory contains a tree of clusters
+            # and ESXi hosts as well as VMs as child objects. The important
+            # part is that in addition to the names of clusters, hosts and VMs
+            # we store the MOR of the objects. Like this we can easily make an
+            # API call to fetch metrics.
             'inventory': {
-                'host_inventory': {
-                    <CLUSTER_NAME>: {
-                        'cluster': <CLUSTER MOR>,
-                        'hosts': {
-                            <HOST_NAME>: <HOST MOR>,
-                            ...
-                        }
+                <CLUSTER_NAME>: {
+                    'cluster': <CLUSTER MOR>,
+                    'hosts': {
+                        <HOST_NAME>: <HOST MOR>,
+                        ...
                     },
-                    ...
-                },
-                'vm_inventory': {
-                    <CLUSTER_NAME>: {
-                        'cluster': <CLUSTER MOR>,
-                        'vms': {
-                            <VM NAME>: <VM MOR>,
-                            ...
-                        }
-                    },
-                    ...
+                    'vms': {
+                        <VM_NAME>: <VM MOR>,
+                        ...
+                    }
                 }
             },
 
@@ -378,13 +368,13 @@ class InventoryWatchDog(threading.Thread):
     10min by default."""   
 
     conn = None
-    inventory = None
+    environment = None
     sleepSeconds = None
 
-    def __init__(self, conn, inventory, sleepSeconds):
+    def __init__(self, conn, environment, sleepSeconds):
         threading.Thread.__init__(self)
         self.conn = conn
-        self.inventory = inventory
+        self.environment = environment
         self.sleepSeconds = sleepSeconds
 
     def run(self):
@@ -397,25 +387,38 @@ class InventoryWatchDog(threading.Thread):
         while True:
             collectd.info("Running inventory refresh ...")
 
-            # Build the host inventory here:
-            host_inventory = {}
+            # Get the inventory and clear it. Create an empty one if none
+            # exists.
+            inventory = self.environment.get('inventory')
+            if inventory:
+                inventory.clear()
+            else:
+                inventory = {}
+                self.environment['inventory'] = inventory
+    
             for cluster_data in self.conn.get_clusters().items():
                 cluster = cluster_data[0]
                 cluster_name = cluster_data[1]
                 cluster_count += 1
+
+                inventory[cluster_name] = {
+                    'cluster': cluster    
+                }
+
+                # Build the host list
                 hosts = {}
                 for hData in self.conn.get_hosts(cluster).items():
                     host = hData[0]
                     host_name = hData[1]
                     hosts[host_name] = host
                     host_count += 1
-                host_inventory[cluster_name] = {
-                    'cluster': cluster,   
-                    'hosts': hosts
-                }
-            self.inventory['host_inventory'] = host_inventory
-           
-            # TODO: Build the VM inventory here
+
+                inventory[cluster_name]['hosts'] = hosts                
+
+                # Build the vm list
+                vms = {}
+                # TODO: build the VM list
+                inventory[cluster_name]['vms'] = vms
 
             collectd.info("Found " + str(host_count) + " hosts in " + str(cluster_count) + " clusters. Next refresh in " + str(self.sleepSeconds) + "s")
             
