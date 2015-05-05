@@ -205,7 +205,7 @@ def shutdown_callback():
     """ Called by collectd on shutdown. """
 
     # Disconnect all existing vCenter connections
-	for vc_name in ENVIRONMENT.keys():
+    for vc_name in ENVIRONMENT.keys():
 		env = ENVIRONMENT.get(vc_name)
 		conn = env.get('conn')
 		conn.disconnect()
@@ -403,6 +403,7 @@ class InventoryWatchDog(threading.Thread):
                 cluster = cluster_data[0]
                 cluster_name = cluster_data[1]
                 cluster_count += 1
+                hosts = {}
                 for hData in self.conn.get_hosts(cluster).items():
                     host = hData[0]
                     host_name = hData[1]

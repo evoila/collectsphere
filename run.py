@@ -40,6 +40,9 @@ children.append(Conf('Host', ('FQDN',)))
     elapsed_time = time.time() - start_time      
     sys.stderr.write("Conf/Init Time: " + str(elapsed_time) + "\n")    
 
+    # sleep 10sec to give the inventory watch dog some time to refresh the inventory tree
+    time.sleep(10)
+
     # Execute the plugin once
     start_time = time.time() 
 

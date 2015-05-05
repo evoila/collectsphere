@@ -92,8 +92,14 @@ def error(message):
 def register_config(func):
     return
 
+def register_init(func):
+    return
+
 def register_read(func):
     return
 
 def register_write(func):
+    return
+
+def register_shutdown(func):
     return
