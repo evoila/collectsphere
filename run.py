@@ -1,10 +1,24 @@
+#!/usr/bin/env python
+
+"""
+This script is used to execute the collectd plugin from the command line
+without collectd. It uses the mock of the collectd framework in collectd.py to
+initialize the plugin as collectd would.
+"""
+
+# vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
+
 import time
 import collectsphere
 from collectd import Conf
 import sys   
  
 def main():
-    
+    """ The plugin is initialized and executed once. This is intended for test
+    and dev and measures execution times. """
+
+    # This mocks the configuration of collectd. A proper example of a
+    # configuration file can be found in collectsphere.conf
     children = []
     children.append(Conf('Name', ('vc47-1',)))
     children.append(Conf('Host', ('vc47-1.mobile.rz',)))
@@ -12,24 +26,27 @@ def main():
     children.append(Conf('Verbose', ('True',)))
     children.append(Conf('Username', ('autoconf',)))
     children.append(Conf('Password', ('4b0dac37',)))
-    children.append(Conf('Host_Counters', ('cpu.usage,cpu.ready,net.bytesTx,net.bytesRx,net.droppedRx,net.droppedTx,mem.usage,mem.swapused,mem.consumed,mem.compressed,mem.vmmemctl,disk.write,disk.totalLatency,disk.usage,disk.read,datastore.datastoreIops,disk.kernelLatency',)))
-    children.append(Conf('VM_Counters', ('',)))
+    children.append(Conf('Host_Counters', ('cpu.usage,mem.usage,disk.usage',)))
+    children.append(Conf('VM_Counters', ('cpu.usage,mem.usage',)))
     children.append(Conf('Inventory_Refresh_Interval', ('600',)))
-        
     conf = Conf(None, None, children)
     
+    # Configure and initialize the plugin
     start_time = time.time()
+    
     collectsphere.configure_callback(conf)
     collectsphere.init_callback()
+    
     elapsed_time = time.time() - start_time      
-    sys.stderr.write("Conf Time: " + str(elapsed_time) + "\n")    
+    sys.stderr.write("Conf/Init Time: " + str(elapsed_time) + "\n")    
 
-    while True:
-        start_time = time.time()        
-        collectsphere.read_callback()
-        elapsed_time = time.time() - start_time      
-        sys.stderr.write("Read Time: " + str(elapsed_time) + "\n")
-        time.sleep(20)
+    # Execute the plugin once
+    start_time = time.time() 
+
+    collectsphere.read_callback()
+        
+    elapsed_time = time.time() - start_time      
+    sys.stderr.write("Read Time: " + str(elapsed_time) + "\n")
 
 if __name__ == "__main__":
     main()
