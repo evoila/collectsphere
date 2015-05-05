@@ -177,7 +177,7 @@ def read_callback():
             # returned by the vSphere API with an empty string for "instance".
             # This is the overall value accross all logical CPUs.
             if(len(stat.instance.strip()) == 0):
-                instance = 'average'
+                instance = 'all'
            
             # We are limited to 63 characters for the type_instance field. This
             # is why we need to shorten NAA canonical names and VMFS UUIDs. For
