@@ -202,7 +202,7 @@ def read_callback():
     collectd.info("All threads returned, all values dispatched.")
 
 def shutdown_callback():
-	""" Called by collectd on shutdown. """
+    """ Called by collectd on shutdown. """
 
     # Disconnect all existing vCenter connections
 	for vc_name in ENVIRONMENT.keys():
