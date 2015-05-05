@@ -1,3 +1,15 @@
+"""
+This is the code that needs to be integrated into collectd when run in
+production. It contains the python code that integrates into the python module
+for collectd. It connects to one or more vCenter Servers and gathers the configured 
+metrics from ESXi hosts and Virtual Machines.
+
+The file is organized in multiple sections. The first section implements the
+callback functions executed be collectd which is followed be a couple of helper
+functions that separate out some code to make the rest more readable. The
+helper classes section provides threads that are used to parallelize things and
+make the plugin a lot faster.
+"""
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
 
 import collectd

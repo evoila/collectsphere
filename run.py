@@ -20,12 +20,12 @@ def main():
     # This mocks the configuration of collectd. A proper example of a
     # configuration file can be found in collectsphere.conf
     children = []
-    children.append(Conf('Name', ('vc47-1',)))
-    children.append(Conf('Host', ('vc47-1.mobile.rz',)))
+    children.append(Conf('Name', ('NAME',)))
+children.append(Conf('Host', ('FQDN',)))
     children.append(Conf('Port', ('443',)))
     children.append(Conf('Verbose', ('True',)))
-    children.append(Conf('Username', ('autoconf',)))
-    children.append(Conf('Password', ('4b0dac37',)))
+    children.append(Conf('Username', ('USERNAME',)))
+    children.append(Conf('Password', ('PASSWORD',)))
     children.append(Conf('Host_Counters', ('cpu.usage,mem.usage,disk.usage',)))
     children.append(Conf('VM_Counters', ('cpu.usage,mem.usage',)))
     children.append(Conf('Inventory_Refresh_Interval', ('600',)))
