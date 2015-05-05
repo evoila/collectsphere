@@ -1,0 +1,9 @@
+IMPROVEMENTS:
+- The inventory trees can be merged to a single tree instead of a host inventory and a vm inventory.
+- A proper way to terminate the inventory watch dog thread when collectd shuts down has to be found.
+
+FEATURES:
+- Add support for monitoring Virtual Machines:
+    - The VMs are not part of the inventory yet: Add those!
+    - Generalize the GetMetricsThread to support virtual machines not only hosts
+    - Add the code to spawn threads and dispatch virtual machine data
