@@ -468,7 +468,6 @@ class InventoryWatchDog(threading.Thread):
                 # initialize the MOR to None
                 for vm_path in vm_path_list:
                     if not vm_path in vm_inventory:
-                        collectd.info("Discovered new VM: " + vm_path)
                         vm_inventory[vm_path] = None
 
                 # Spawn threads to fetch the VM object of every VM that is in
@@ -481,7 +480,7 @@ class InventoryWatchDog(threading.Thread):
                         thread.start()
                         threads.append(thread)
 
-                print "Spawned %d threads to fetch VM objects" % (len(threads))
+                collectd.info("Spawned %d threads to fetch VM objects in cluster %s" % (len(threads), cluster_name))
 
                 # Wait for the threads to finish, the put the VM MORs into the
                 # inventory
