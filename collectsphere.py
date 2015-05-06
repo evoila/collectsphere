@@ -20,10 +20,10 @@ import ssl
 import re
 from pysphere import VIServer
 
-CONFIGS = []            # Stores the configuration as passed from collectd
-ENVIRONMENT = {}        # Runtime data and object cache
-SHUTDOWN_SIGNAL_CONDITION = threading.Condition() # Used to control the access to SHUTDOWN_SIGNAL by the threads
-SHUTDOWN_SIGNAL = False; 		# Used to signal the shutdown to the spawned threads
+CONFIGS = []                                        # Stores the configuration as passed from collectd
+ENVIRONMENT = {}                                    # Runtime data and object cache
+SHUTDOWN_SIGNAL_CONDITION = threading.Condition()   # Used to control the access to SHUTDOWN_SIGNAL by the threads
+SHUTDOWN_SIGNAL = False; 		                    # Used to signal the shutdown to the spawned threads
 
 #####################################################################################
 # IMPLEMENTATION OF COLLECTD CALLBACK FUNCTIONS 
@@ -206,12 +206,12 @@ def read_callback():
 
 def shutdown_callback():
     """ Called by collectd on shutdown. """
-	
-	# Shutdown the Watchdogs
-	SHUTDOWN_SIGNAL_CONDITION.aquire()
-	SHUTDOWN_SIGNAL = True;
-	SHUTDOWN_SIGNAL_CONDITION.notifyAll();
-	SHUTDOWN_SIGNAL_CONDITION.release();
+
+    # Shutdown the Watchdogs
+    SHUTDOWN_SIGNAL_CONDITION.acquire()
+    SHUTDOWN_SIGNAL = True;
+    SHUTDOWN_SIGNAL_CONDITION.notifyAll();
+    SHUTDOWN_SIGNAL_CONDITION.release();
 
     # Disconnect all existing vCenter connections
     for vc_name in ENVIRONMENT.keys():
@@ -393,13 +393,6 @@ class InventoryWatchDog(threading.Thread):
 
         # In a infinite loop build the inventory tree
         while True:
-			SHUTDOWN_SIGNAL_CONDITION.aquire()
-			SHUTDOWN_SIGNAL_CONDITION.wait(self.sleepSeconds)
-			if SHUTDOWN_SIGNAL:
-				SHUTDOWN_SIGNAL_CONDITION.notifyAll()
-				SHUTDOWN_SIGNAL_CONDITION.release()
-				break
-			
             collectd.info("Running inventory refresh ...")
 
             # Get the inventory and clear it. Create an empty one if none
@@ -436,6 +429,13 @@ class InventoryWatchDog(threading.Thread):
                 inventory[cluster_name]['vms'] = vms
 
             collectd.info("Found " + str(host_count) + " hosts in " + str(cluster_count) + " clusters. Next refresh in " + str(self.sleepSeconds) + "s")
+			
+            SHUTDOWN_SIGNAL_CONDITION.aquire()
+            SHUTDOWN_SIGNAL_CONDITION.wait(self.sleepSeconds)
+            if SHUTDOWN_SIGNAL:
+			    SHUTDOWN_SIGNAL_CONDITION.notifyAll()
+			    SHUTDOWN_SIGNAL_CONDITION.release()
+			    break
 
 #####################################################################################
 # COLLECTD REGISTRATION 
