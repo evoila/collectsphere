@@ -17,5 +17,5 @@ Development and testing was conducted with ...
 A Collectd plugin allows to use existing infrastructure in collectd to start/stop/execute the plugin and forward values to existing backends. Like this you can easily send the information gathered to for example Graphite and create nice looking dashboards with e.g. Grafana. (This was the primary goal of this project.)
 
 # Screenshot from Grafana
-![CPU Usage](/screenshots/cpu-usage.jpg)
+![CPU Usage](/screenshots/cpu-usage.png)
 
