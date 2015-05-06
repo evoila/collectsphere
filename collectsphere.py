@@ -76,7 +76,7 @@ def configure_callback(conf):
             collectd.warning('collectsphere plugin: Unknown config key: %s.' % key )
             continue
 
-    collectd.info('Loaded config: name=%s, host=%s, port=%s, verbose=%s, username=%s, password=%s, host_metrics=%s, vm_metrics=%s, inventory_refresh_interval=%s' % (name, host, port, verbose, username, "******", len(host_counters), len(vm_counters), inventory_refresh_interval))
+    collectd.info('configure_callback: Loaded config: name=%s, host=%s, port=%s, verbose=%s, username=%s, password=%s, host_metrics=%s, vm_metrics=%s, inventory_refresh_interval=%s' % (name, host, port, verbose, username, "******", len(host_counters), len(vm_counters), inventory_refresh_interval))
 
     CONFIGS.append({
         'name': name,
@@ -122,17 +122,17 @@ def read_callback():
     # Walk through the existing environments
     for name in ENVIRONMENT.keys():
         env = ENVIRONMENT[name]
-        collectd.info("Entering environment: " + name)
+        collectd.info("read_callback: entering environment: " + name)
         conn = env['conn']
 
         # Reconnect to vCenter Server if necessary and give up if a connection
         # cannot be established.
         if(conn.is_connected() == False):
-            collectd.info("Reconnecting")
+            collectd.info("read_callback: reconnecting")
             reconnect(name)
             conn = env['conn']
             if(conn.is_connected() == False):
-                collectd.info("Reconnect unsuccessful. Giving up.")
+                collectd.info("read_callback: reconnect unsuccessful. Giving up.")
                 continue
         
         # fetch the instance of perf manager from the object cache
@@ -142,14 +142,29 @@ def read_callback():
         # watch dog and spawn a thread for every host.
         
         host_counter_ids = env.get('host_counter_ids')
+        vm_counter_ids = env.get('vm_counter_ids')
         inventory = env.get('inventory')
+
+        # See if there is something to monitor in the environment
+        host_count = 0
+        vm_count = 0
+        for cluster_name in inventory.keys():
+            host_count += len(inventory.get(cluster_name).get('hosts'))
+            vm_count += len(inventory.get(cluster_name).get('vms'))
+
+        # If 0 clusters or no vms and hosts where discovered, skip to the next environment
+        if (host_count == 0 and vm_count == 0):
+            collectd.info("read_callback: skipping to next environment")
+            continue
+        else:
+            collectd.info("read_callback: found %d hosts and %d VMs in the inventory cache" % (host_count, vm_count))
 
         # Only do this if the inventory tree is not empty. If is isn't: for
         # every host in every cluster spawn a thread.
         if inventory:
-            print inventory
-            
             for cluster_name in inventory.keys():
+                
+                # Spawn threads for every host
                 for host_name in inventory.get(cluster_name).get('hosts').keys():
                     
                     # fetch the host MOR from the inventory tree
@@ -161,9 +176,22 @@ def read_callback():
         
                     # append the thread to the list of threads
                     threads.append(thread)
-        
-        collectd.info("Spawned " + str(len(threads)) + " threads to fetch metrics.")
- 
+                
+                # Spawn threads for every VM
+                for vm_path in inventory.get(cluster_name).get('vms').keys():
+                    
+                    # fetch the VM
+                    vm = inventory.get(cluster_name).get('vms').get(vm_path)
+
+                    # create thread and execute
+                    thread = GetMetricsThread(pm, vm._mor, vm_counter_ids, name, cluster_name, vm.get_properties().get('name'))
+                    thread.start()
+
+                    # append the thread to the list of threads
+                    threads.append(thread)
+
+        collectd.info("read_callback: spawned " + str(len(threads)) + " threads to fetch host and VM metrics.")
+
     # Wait for all threads to finish. Then dispatch all gathered values to collectd.
     for th in threads:
         th.join()
@@ -215,7 +243,7 @@ def read_callback():
             cd_value.values = [value]
             cd_value.dispatch()
 
-    collectd.info("All threads returned, all values dispatched.")
+    collectd.info("read_callback: all threads returned, all values dispatched.")
 
 def shutdown_callback():
     """ Called by collectd on shutdown. """
@@ -296,7 +324,7 @@ def create_environment(config):
     """
     
     url = config.get("host") + ":" + str(config.get("port"))
-    collectd.info("URL: " + url)
+    collectd.info("create_environment: URL: " + url)
 
     # Connect to vCenter Server
     viserver = VIServer()
@@ -315,7 +343,7 @@ def create_environment(config):
     # IDs and establish the lookup table.
     hosts = viserver.get_hosts().items()
     if(len(hosts) == 0):
-        collectd.info("vCenter " + config.get("name") + " does not contain any hosts. Cannot continue")
+        collectd.info("create_environment: vCenter " + config.get("name") + " does not contain any hosts. Cannot continue")
         return
     host_key = hosts[0][0]
     env['lookup_host'] = env['pm'].get_entity_counters(host_key)
@@ -323,7 +351,7 @@ def create_environment(config):
     # The same is true for VMs: We need at least one VM to fetch the Counter IDs.
     vms = viserver.get_registered_vms()
     if(len(vms) == 0):
-        collectd.info("vCenter " + config.get("name") + " does not contain any VMs. Cannot continue")
+        collectd.info("create_environment: vCenter " + config.get("name") + " does not contain any VMs. Cannot continue")
         return
     vm = viserver.get_vm_by_path(vms[0])
     vm_mor = vm._mor
@@ -415,7 +443,7 @@ class InventoryWatchDog(threading.Thread):
     
         # In a infinite loop build the inventory tree
         while True:
-            collectd.info("Running inventory refresh ...")
+            collectd.info("InventoryWatchDog: Running inventory refresh ...")
 
             start_time = time.time()
 
@@ -441,19 +469,22 @@ class InventoryWatchDog(threading.Thread):
                     }
 
                 # HOST INVENTORY
-                host_inventory = inventory.get(cluster_name).get('hosts')
+                host_inventory = {}
                 
-                # clear the host inventory
-                host_inventory.clear()
-
                 # fill it with the hosts
                 for hData in self.conn.get_hosts(cluster).items():
                     host_mor = hData[0]
                     host_name = hData[1]
                     host_inventory[host_name] = host_mor
+                
 
                 # VM INVENTORY
-                vm_inventory = inventory.get(cluster_name).get('vms')
+
+                # As we are working on the inventory dictionary but dont want
+                # the main thread to spawn threads to fetch metrics for object
+                # that are not fully discovered yet, we have to work on a copy
+                # of the vm_inventory and then swap it with the original
+                vm_inventory = inventory.get(cluster_name).get('vms').copy()
 
                 # fetch list of vm paths (this is very quick)
                 vm_path_list = self.conn.get_registered_vms(cluster=cluster)
@@ -480,7 +511,7 @@ class InventoryWatchDog(threading.Thread):
                         thread.start()
                         threads.append(thread)
 
-                collectd.info("Spawned %d threads to fetch VM objects in cluster %s" % (len(threads), cluster_name))
+                collectd.info("InventoryWatchDog: Spawned %d threads to fetch VM objects in cluster %s" % (len(threads), cluster_name))
 
                 # Wait for the threads to finish, the put the VM MORs into the
                 # inventory
@@ -489,12 +520,16 @@ class InventoryWatchDog(threading.Thread):
                     if thread.get_vm:
                         vm_path = thread.vm_path
                         vm = thread.get_vm()
-                        vm_inventory[vm_path] = vm._mor
-            
+                        vm_inventory[vm_path] = vm
+               
+                # PUBLISH THE NEW INVENTORY
+                inventory.get(cluster_name)['hosts'] = host_inventory
+                inventory.get(cluster_name)['vms'] = vm_inventory
+
             end_time = time.time()
             elapsed_time = end_time - start_time
 
-            collectd.info("Discovered %d hosts and %d VMs in %d clusters in %d seconds. Next refresh in %d seonds." % (
+            collectd.info("InventoryWatchDog: Discovered %d hosts and %d VMs in %d clusters in %d seconds. Next refresh in %d seonds." % (
                 len(inventory[cluster_name]['hosts'].keys()),
                 len(inventory[cluster_name]['vms'].keys()),
                 len(inventory.keys()),
