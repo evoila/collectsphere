@@ -154,7 +154,7 @@ def read_callback():
 
         # If 0 clusters or no vms and hosts where discovered, skip to the next environment
         if (host_count == 0 and vm_count == 0):
-            collectd.info("read_callback: skipping to next environment")
+            collectd.info("read_callback: Inventory is empty. Skipping to next environment")
             continue
         else:
             collectd.info("read_callback: found %d hosts and %d VMs in the inventory cache" % (host_count, vm_count))
@@ -511,37 +511,52 @@ class InventoryWatchDog(threading.Thread):
 
                 collectd.info("InventoryWatchDog: Removed %d VMs from my inventory cache" % (removed))
 
-                # add all vm paths that are not already in the inventory and
-                # initialize the MOR to None
-                new = 0
+                # Generate list of VM paths that need to be added to the
+                # inventory
+                new_vms = []
                 for vm_path in vm_path_list:
                     if not vm_path in vm_inventory:
-                        vm_inventory[vm_path] = None
-                        new += 1
-                
-                collectd.info("InventoryWatchDog: Adding %d VMs to cache. Spawning threads..." % (new))
+                        new_vms.append(vm_path)
+
+                collectd.info("InventoryWatchDog: Adding %d VMs to cache. Spawning threads..." % (len(new_vms)))
 
                 # Spawn threads to fetch the VM object of every VM that is in
                 # the unknown list
-                threads = []
-                for vm_path in vm_inventory.keys():
-                    # Spawn a thread only if the MOR is None
-                    if not vm_inventory.get(vm_path):
+                max_threads = 50
+                start_index = 0
+                end_index = -1
+
+                while end_index < (len(new_vms)-1):
+
+                    # calculate the end index
+                    end_index = start_index + max_threads - 1
+                    if(end_index > (len(new_vms)-1)):
+                        end_index = len(new_vms)-1
+                
+                    # get the subset of vm paths
+                    current_vm_paths = new_vms[start_index:end_index + 1]
+                    
+                    # spawn threads
+                    threads = []
+                    for vm_path in current_vm_paths:
                         thread = GetVMThread(vm_path, self.conn)
                         thread.start()
                         threads.append(thread)
-
-                collectd.info("InventoryWatchDog: Spawned %d threads to fetch VM objects in cluster %s" % (len(threads), cluster_name))
-
-                # Wait for the threads to finish, the put the VM MORs into the
-                # inventory
-                for thread in threads:
-                    thread.join()
-                    if thread.get_vm:
-                        vm_path = thread.vm_path
-                        vm = thread.get_vm()
-                        vm_inventory[vm_path] = vm
                 
+                    collectd.info("InventoryWatchDog: Spawned %d threads (%d - %d) to fetch VM objects in cluster %s" % (len(threads), start_index, end_index, cluster_name))
+                
+                    # Wait for the threads to finish, the put the VM MORs into the
+                    # inventory
+                    for thread in threads:
+                        thread.join()
+                        if thread.get_vm:
+                            vm_path = thread.vm_path
+                            vm = thread.get_vm()
+                            vm_inventory[vm_path] = vm
+                   
+                    # set start_index to the next element for the next run
+                    start_index = end_index + 1
+
                 collectd.info("InventoryWatchDog: All threads returned. Publishing inventory...")
 
                 # PUBLISH THE NEW INVENTORY
