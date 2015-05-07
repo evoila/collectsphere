@@ -163,7 +163,9 @@ def read_callback():
         # every host in every cluster spawn a thread.
         if inventory:
             for cluster_name in inventory.keys():
-                
+               
+                collectd.info("read_callback: Cluster %s: Spawning %d threads to fetch host metrics." % (cluster_name, len(inventory.get(cluster_name).get('hosts').keys())))
+
                 # Spawn threads for every host
                 for host_name in inventory.get(cluster_name).get('hosts').keys():
                     
@@ -176,6 +178,8 @@ def read_callback():
         
                     # append the thread to the list of threads
                     threads.append(thread)
+                
+                collectd.info("read_callback: Cluster %s: Spawning %d threads to fetch VM metrics." % (cluster_name, len(inventory.get(cluster_name).get('vms').keys())))
                 
                 # Spawn threads for every VM
                 for vm_path in inventory.get(cluster_name).get('vms').keys():
@@ -190,9 +194,10 @@ def read_callback():
                     # append the thread to the list of threads
                     threads.append(thread)
 
-        collectd.info("read_callback: spawned " + str(len(threads)) + " threads to fetch host and VM metrics.")
+    collectd.info("read_callback: Spawned a total of " + str(len(threads)) + " threads to fetch Host and VM metrics.")
 
     # Wait for all threads to finish. Then dispatch all gathered values to collectd.
+    stats_count = 0
     for th in threads:
         th.join()
 
@@ -202,6 +207,8 @@ def read_callback():
         cluster_name = th.cluster_name
         host_name = th.host_name
         stats = th.stats
+
+        stats_count += len(stats)
 
         # For every stat object work up the data, then dispatch
         for stat in stats:
@@ -243,7 +250,7 @@ def read_callback():
             cd_value.values = [value]
             cd_value.dispatch()
 
-    collectd.info("read_callback: all threads returned, all values dispatched.")
+    collectd.info("read_callback: Dispatched a total of %d values to collectd." % (stats_count))
 
 def shutdown_callback():
     """ Called by collectd on shutdown. """
