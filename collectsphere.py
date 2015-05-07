@@ -41,8 +41,8 @@ def configure_callback(conf):
     verbose = None
     username = 'root'                   
     password = 'vmware'                 
-    host_counters = []
-    vm_counters = []
+    host_counters = ['cpu.usage', 'mem.usage']
+    vm_counters = ['cpu.usage','mem.usage']
     inventory_refresh_interval = 600  
 
     for node in conf.children:
@@ -69,8 +69,7 @@ def configure_callback(conf):
         elif key == 'vm_counters':
             values = val[0].split(',')
             for m in values:
-                if len(m) > 0:
-                    vm_counters.append(m.strip())
+                vm_counters.append(m.strip())
         elif key == 'inventory_refresh_interval':
             inventory_refresh_interval = int(val[0])
         else:
@@ -240,17 +239,9 @@ def read_callback():
                 values = instance.split('.')
                 instance = values[0] + values[1][-6:]
 
-            # shorten names that consist of UUID only (VMFS UUID)
             if re.search('^[0-9a-f-]+$', instance):
                 instance = instance[:6] 
-
-            # shorten vCloud Director VM names
-            m = re.match('.*\(([0-9a-f-]+)\)', entity_name)
-            if m:
-                uuid = m.group(1)
-                short_uuid = uuid[:6]
-                entity_name = entity_name.replace(uuid, short_uuid)
- 
+        
             # Now we used the collectd API for dispatch the information to
             # collectd which will then take care of sending it to rrdtool,
             # graphite or whereever.
