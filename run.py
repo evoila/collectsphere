@@ -21,7 +21,7 @@ def main():
     # configuration file can be found in collectsphere.conf
     children = []
     children.append(Conf('Name', ('NAME',)))
-children.append(Conf('Host', ('FQDN',)))
+    children.append(Conf('Host', ('FQDN',)))
     children.append(Conf('Port', ('443',)))
     children.append(Conf('Verbose', ('True',)))
     children.append(Conf('Username', ('USERNAME',)))
@@ -43,13 +43,16 @@ children.append(Conf('Host', ('FQDN',)))
     # sleep 10sec to give the inventory watch dog some time to refresh the inventory tree
     time.sleep(10)
 
-    # Execute the plugin once
-    start_time = time.time() 
+    while True:
+        # Execute the plugin once
+        start_time = time.time() 
 
-    collectsphere.read_callback()
+        collectsphere.read_callback()
         
-    elapsed_time = time.time() - start_time      
-    sys.stderr.write("Read Time: " + str(elapsed_time) + "\n")
+        elapsed_time = time.time() - start_time      
+        sys.stderr.write("Read Time: " + str(elapsed_time) + "\n")
+
+        time.sleep(60)
 
 if __name__ == "__main__":
     main()
