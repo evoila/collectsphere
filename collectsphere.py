@@ -173,7 +173,7 @@ def read_callback():
                     host = inventory.get(cluster_name).get('hosts').get(host_name)
                    
                     # create thread and execute
-                    thread = GetMetricsThread(pm, host, host_counter_ids, name, cluster_name, host_name.split('.')[0])
+                    thread = GetMetricsThread(pm, host, host_counter_ids, name, cluster_name, 'host', host_name.split('.')[0])
                     thread.start()
         
                     # append the thread to the list of threads
@@ -188,7 +188,7 @@ def read_callback():
                     vm = inventory.get(cluster_name).get('vms').get(vm_path)
 
                     # create thread and execute
-                    thread = GetMetricsThread(pm, vm._mor, vm_counter_ids, name, cluster_name, vm.get_properties().get('name'))
+                    thread = GetMetricsThread(pm, vm._mor, vm_counter_ids, name, cluster_name, 'vm', vm.get_properties().get('name'))
                     thread.start()
 
                     # append the thread to the list of threads
@@ -205,7 +205,8 @@ def read_callback():
         # properly dispatch the values. Fetch that information now.
         vc_name = th.vc_name
         cluster_name = th.cluster_name
-        host_name = th.host_name
+        entity_type = th.entity_type
+        entity_name = th.entity_name
         stats = th.stats
 
         stats_count += len(stats)
@@ -246,7 +247,7 @@ def read_callback():
             # graphite or whereever.
             cd_value = collectd.Values(plugin="collectsphere")
             cd_value.type = "gauge"
-            cd_value.type_instance = cluster_name + "." + host_name + "." + group + "." + instance + "." + counter + "." + unit
+            cd_value.type_instance = cluster_name + "." + entity_type + "." + entity_name + "." + group + "." + instance + "." + counter + "." + unit
             cd_value.values = [value]
             cd_value.dispatch()
 
@@ -417,14 +418,15 @@ class GetMetricsThread(threading.Thread):
     """ This thread takes parameters necessary to fetch the metrics of a single
     host and later identify the source of the data once the thread is done. """
 
-    def __init__(self, pm, entity_key, metric_ids, vc_name, cluster_name, host_name):
+    def __init__(self, pm, entity_key, metric_ids, vc_name, cluster_name, entity_type, entity_name):
         threading.Thread.__init__(self)
         self.pm = pm
         self.entity_key = entity_key
         self.metric_ids = metric_ids
         self.vc_name = vc_name
         self.cluster_name = cluster_name
-        self.host_name = host_name
+        self.entity_type = entity_type
+        self.entity_name = entity_name
 
     def run(self):
         # The API call is very simple thanks to pysphere :)
