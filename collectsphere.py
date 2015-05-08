@@ -209,6 +209,9 @@ def read_callback():
         entity_name = th.entity_name
         stats = th.stats
 
+        cluster_name = truncate(cluster_name)
+        entity_name = truncate(entity_name)
+
         stats_count += len(stats)
 
         # For every stat object work up the data, then dispatch
@@ -229,19 +232,11 @@ def read_callback():
             # This is the overall value accross all logical CPUs.
             if(len(stat.instance.strip()) == 0):
                 instance = 'all'
-           
-            # We are limited to 63 characters for the type_instance field. This
-            # is why we need to shorten NAA canonical names and VMFS UUIDs. For
-            # NAAs it makes the most sense to use the last 6 characters while
-            # UUIDs should be unique with the first 6. Unfortunately, there is
-            # a chance to collisions for VMFS UUIDs.
-            if 'naa' in instance:
-                values = instance.split('.')
-                instance = values[0] + values[1][-6:]
-
-            if re.search('^[0-9a-f-]+$', instance):
-                instance = instance[:6] 
-        
+            
+            # struncate
+            instance = truncate(instance)
+            unit = truncate(unit)
+ 
             # Now we used the collectd API for dispatch the information to
             # collectd which will then take care of sending it to rrdtool,
             # graphite or whereever.
@@ -272,6 +267,45 @@ def shutdown_callback():
 #####################################################################################
 # HELPER FUNCTIONS 
 #####################################################################################
+
+def truncate(str):
+    """ We are limited to 63 characters for the type_instance field. This
+    function truncates names in a sensible way """
+
+    # NAA/T10 Canonical Names
+    m = re.match('(naa|t10)\.([0-9a-f]{32})', str, re.IGNORECASE)
+    if m:
+        id_type = m.group(1).lower()
+        identifier = m.group(2).lower()
+        str = id_type + identifier[-6:]
+
+    # UUIDs in general
+    m = re.match('^(.*)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(.*)$', str, re.IGNORECASE)
+    if m:
+        before = m.group(1).lower()
+        uuid = m.group(2).lower()
+        after = m.group(3).lower()
+        short_uuid = uuid[:6]
+        str = before + short_uuid + after
+
+    # VMFS UUIDs: e.g. 541822a1-d2dcad52-129a-0025909ac654
+    m = re.match('^(.*)([0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{12})(.*)$', str, re.IGNORECASE)
+    if m:
+        before = m.group(1).lower()
+        uuid = m.group(2).lower()
+        after = m.group(3).lower()
+        short_uuid = uuid[:6]
+        str = before + short_uuid + after
+   
+    # truncate units       
+    str = str.replace('millisecond', 'ms')
+    str = str.replace('percent', 'perc')
+    str = str.replace('number', 'num')
+    str = str.replace('kiloBytesPerSecond', 'KBps')
+    str = str.replace('kiloBytes', 'KB')
+    str = str.replace('megaBytes', 'MB')
+
+    return str
 
 def create_environment(config):
     """
