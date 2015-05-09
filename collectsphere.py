@@ -283,14 +283,15 @@ def truncate(str):
         identifier = m.group(2).lower()
         str = id_type + identifier[-6:]
 
-    # UUIDs in general
-    m = re.match('^(.*)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(.*)$', str, re.IGNORECASE)
+    # vCloud Director naming pattern
+    m = re.match('^(.*)\s\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)(.*)$', str, re.IGNORECASE)
     if m:
-        before = m.group(1).lower()
+        vm_name = m.group(1).lower()
         uuid = m.group(2).lower()
-        after = m.group(3).lower()
+        suffix = m.group(3).lower()
+        short_vm_name = vm_name[:6]
         short_uuid = uuid[:6]
-        str = before + short_uuid + after
+        str = short_vm_name + '-' + short_uuid + suffix
 
     # VMFS UUIDs: e.g. 541822a1-d2dcad52-129a-0025909ac654
     m = re.match('^(.*)([0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{12})(.*)$', str, re.IGNORECASE)
