@@ -236,13 +236,17 @@ def read_callback():
             # struncate
             instance = truncate(instance)
             unit = truncate(unit)
- 
+
+            type_instance_str = cluster_name + "." + entity_type + "." + entity_name + "." + group + "." + instance + "." + counter + "." + unit
+            type_instance_str = type_instance_str.replace(' ', '_')
+
+     
             # Now we used the collectd API for dispatch the information to
             # collectd which will then take care of sending it to rrdtool,
             # graphite or whereever.
             cd_value = collectd.Values(plugin="collectsphere")
             cd_value.type = "gauge"
-            cd_value.type_instance = cluster_name + "." + entity_type + "." + entity_name + "." + group + "." + instance + "." + counter + "." + unit
+            cd_value.type_instance = type_instance_str
             cd_value.values = [value]
             cd_value.dispatch()
 
