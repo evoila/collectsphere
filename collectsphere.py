@@ -395,7 +395,7 @@ def create_environment(config):
     env['lookup_host'] = env['pm'].get_entity_counters(host_key)
 
     # The same is true for VMs: We need at least one VM to fetch the Counter IDs.
-    vms = viserver.get_registered_vms()
+    vms = viserver.get_registered_vms(status='poweredOn')
     if(len(vms) == 0):
         collectd.info("create_environment: vCenter " + config.get("name") + " does not contain any VMs. Cannot continue")
         return
