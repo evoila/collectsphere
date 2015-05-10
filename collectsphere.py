@@ -115,6 +115,9 @@ def read_callback():
     minimize the execution time of the function which is why a lot of caching
     is performed using the environment objects. """
 
+    # keep track of own execution time
+    start_time = time.time()
+
     # We are going to spawn a lot of threads soon to speed up metric fetching.
     # References to the threads are stored here.
     threads = []
@@ -250,7 +253,18 @@ def read_callback():
             cd_value.values = [value]
             cd_value.dispatch()
 
-    collectd.info("read_callback: Dispatched a total of %d values to collectd." % (stats_count))
+    # keep track of own execution time
+    elapsed = time.time() - start_time    
+        
+    # dispatch execution time to collectd
+    cd_value = collectd.Values(plugin="collectsphere")
+    cd_value.type = "gauge"
+    cd_value.type_instance = "exec.time.ms"
+    cd_value.values = [elapsed]
+    cd_value.dispatch()
+
+    collectd.info("read_callback: Dispatched a total of %d values in %f seconds." % (stats_count, elapsed))
+
 
 def shutdown_callback():
     """ Called by collectd on shutdown. """
