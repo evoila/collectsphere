@@ -16,6 +16,13 @@ Development and testing was conducted with ...
 ## Why Collectd?
 A Collectd plugin allows to use existing infrastructure in collectd to start/stop/execute the plugin and forward values to existing backends. Like this you can easily send the information gathered to for example Graphite and create nice looking dashboards with e.g. Grafana. (This was the primary goal of this project.)
 
+# Demo
+
+
+http://88.198.249.51:3000/
+
+admin / admin
+
 # Screenshot from Grafana
-![CPU Usage](/screenshots/cpu-usage.png)
+![](https://raw.githubusercontent.com/evoila/collectsphere/master/screenshots/vms-view.png)
 
