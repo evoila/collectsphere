@@ -21,7 +21,7 @@ A Collectd plugin allows to use existing infrastructure in collectd to start/sto
 
 http://88.198.249.51:3000/
 
-admin / admin
+demo / demo
 
 # Screenshot from Grafana
 ![](https://raw.githubusercontent.com/evoila/collectsphere/master/screenshots/vms-view.png)
