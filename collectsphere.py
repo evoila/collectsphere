@@ -18,7 +18,7 @@ import threading
 import time
 import ssl
 import re
-import time
+import datetime
 from pysphere import VIServer
 
 CONFIGS = []                                        # Stores the configuration as passed from collectd
@@ -199,10 +199,20 @@ def read_callback():
 
     collectd.info("read_callback: Spawned a total of " + str(len(threads)) + " threads to fetch Host and VM metrics.")
 
-    # Wait for all threads to finish. Then dispatch all gathered values to collectd.
-    stats_count = 0
+    # Wait for all threads to finish.
     for th in threads:
         th.join()
+    
+    # Dispatch all gathered values to collectd.
+
+    # prepare Value
+    cd_value = collectd.Values(plugin="collectsphere")
+    cd_value.type = "gauge" 
+    cd_value.time = float(datetime.datetime.utcnow().strftime('%s'))
+
+    stats_count = 0
+
+    for th in threads:
 
         # The thread was spawned with some information that we now need to
         # properly dispatch the values. Fetch that information now.
@@ -226,7 +236,6 @@ def read_callback():
             dtime = stat.time
             unit = stat.unit
             value = float(stat.value)
-            timestamp = time.mktime(dtime.timetuple())
 
             # When the instance value is empty, the vSphere API references a
             # total. Example: A host has multiple cores for each of which we
@@ -243,25 +252,14 @@ def read_callback():
             type_instance_str = cluster_name + "." + entity_type + "." + entity_name + "." + group + "." + instance + "." + counter + "." + unit
             type_instance_str = type_instance_str.replace(' ', '_')
 
-     
-            # Now we used the collectd API for dispatch the information to
-            # collectd which will then take care of sending it to rrdtool,
-            # graphite or whereever.
-            cd_value = collectd.Values(plugin="collectsphere")
-            cd_value.type = "gauge"
-            cd_value.type_instance = type_instance_str
-            cd_value.values = [value]
-            cd_value.dispatch()
+            # now dispatch to collectd
+            cd_value.dispatch(type_instance = type_instance_str, values = [value])
 
     # keep track of own execution time
     elapsed = time.time() - start_time    
         
     # dispatch execution time to collectd
-    cd_value = collectd.Values(plugin="collectsphere")
-    cd_value.type = "gauge"
-    cd_value.type_instance = "exec.time.ms"
-    cd_value.values = [elapsed]
-    cd_value.dispatch()
+    cd_value.dispatch(type_instance = "exec.time.ms", values = [elapsed])
 
     collectd.info("read_callback: Dispatched a total of %d values in %f seconds." % (stats_count, elapsed))
 
@@ -295,7 +293,7 @@ def truncate(str):
     if m:
         id_type = m.group(1).lower()
         identifier = m.group(2).lower()
-        str = id_type + identifier[-6:]
+        str = id_type + identifier[-12:]
 
     # vCloud Director naming pattern
     m = re.match('^(.*)\s\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)(.*)$', str, re.IGNORECASE)
@@ -313,7 +311,7 @@ def truncate(str):
         before = m.group(1).lower()
         uuid = m.group(2).lower()
         after = m.group(3).lower()
-        short_uuid = uuid[:6]
+        short_uuid = uuid[:12]
         str = before + short_uuid + after
    
     # truncate units       
