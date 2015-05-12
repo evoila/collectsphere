@@ -208,7 +208,7 @@ def read_callback():
     # prepare Value
     cd_value = collectd.Values(plugin="collectsphere")
     cd_value.type = "gauge" 
-    cd_value.time = float(datetime.datetime.utcnow().strftime('%s'))
+    cd_value.time = float(datetime.datetime.now().strftime('%s'))
 
     stats_count = 0
 
@@ -289,14 +289,14 @@ def truncate(str):
     function truncates names in a sensible way """
 
     # NAA/T10 Canonical Names
-    m = re.match('(naa|t10)\.([0-9a-f]{32})', str, re.IGNORECASE)
+    m = re.match('(naa|t10)\.(.+)', str, re.IGNORECASE)
     if m:
         id_type = m.group(1).lower()
         identifier = m.group(2).lower()
-        if identifier.startswith('ATA)':
-            m2 = re.match('ATA_+(.+?)_+', identifier, re.IGNORECASE)
-            str = m2.group(1)
-        else
+        if identifier.startswith('ATA'):
+            m2 = re.match('ATA_+(.+?)_+(.+?)_+', identifier, re.IGNORECASE)
+            identifier = m2.group(1) + m2.group(2)
+        else:
             str = id_type + identifier[-12:]
 
     # vCloud Director naming pattern
