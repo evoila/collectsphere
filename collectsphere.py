@@ -245,9 +245,10 @@ def read_callback():
             if(len(stat.instance.strip()) == 0):
                 instance = 'all'
             
-            # struncate
+            # truncate
             instance = truncate(instance)
             unit = truncate(unit)
+            group = truncate(group)
 
             type_instance_str = cluster_name + "." + entity_type + "." + entity_name + "." + group + "." + instance + "." + counter + "." + unit
             type_instance_str = type_instance_str.replace(' ', '_')
@@ -326,6 +327,9 @@ def truncate(str):
     str = str.replace('kiloBytes', 'KB')
     str = str.replace('megaBytes', 'MB')
 
+    # truncate groups
+    str = str.replace('datastore', 'ds')
+    
     return str
 
 def create_environment(config):
