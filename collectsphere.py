@@ -293,7 +293,11 @@ def truncate(str):
     if m:
         id_type = m.group(1).lower()
         identifier = m.group(2).lower()
-        str = id_type + identifier[-12:]
+        if identifier.startswith('ATA)':
+            m2 = re.match('ATA_+(.+?)_+', identifier, re.IGNORECASE)
+            str = m2.group(1)
+        else
+            str = id_type + identifier[-12:]
 
     # vCloud Director naming pattern
     m = re.match('^(.*)\s\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)(.*)$', str, re.IGNORECASE)
