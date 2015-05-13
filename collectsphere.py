@@ -222,6 +222,11 @@ def read_callback():
         entity_name = th.entity_name
         stats = th.stats
 
+        # Sometimes it seems to happen that no stats object is returned.
+        # GetMetricsThread sets self.stats to None in this case. 
+        if not stats:
+            continue
+
         cluster_name = truncate(cluster_name)
         entity_name = truncate(entity_name)
 
@@ -489,6 +494,7 @@ class GetMetricsThread(threading.Thread):
 
     def run(self):
         # The API call is very simple thanks to pysphere :)
+        self.stats = None
         self.stats = self.pm.get_entity_statistic(self.entity_key, self.metric_ids, None, False)
 
 class InventoryWatchDog(threading.Thread):
