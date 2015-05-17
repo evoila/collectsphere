@@ -41,8 +41,8 @@ def configure_callback(conf):
     verbose = None
     username = 'root'                   
     password = 'vmware'                 
-    host_counters = ['cpu.usage', 'mem.usage']
-    vm_counters = ['cpu.usage','mem.usage']
+    host_counters = []
+    vm_counters = []
     inventory_refresh_interval = 600  
 
     for node in conf.children:
@@ -62,14 +62,19 @@ def configure_callback(conf):
         elif key == 'password':
             password = val[0]
         elif key == 'host_counters':
-            values = val[0].split(',')
-            for m in values:
-                if len(m) > 0:
-                    host_counters.append(m.strip())
+            str = val[0]
+            if not str == "all": 
+                values = str.split(',')
+                for m in values:
+                    if len(m) > 0:
+                        host_counters.append(m.strip())
         elif key == 'vm_counters':
-            values = val[0].split(',')
-            for m in values:
-                vm_counters.append(m.strip())
+            str = val[0]
+            if not str == "all": 
+                values = str.split(',')
+                for m in values:
+                    if len(m) > 0:
+                	vm_counters.append(m.strip())
         elif key == 'inventory_refresh_interval':
             inventory_refresh_interval = int(val[0])
         else:
@@ -417,6 +422,7 @@ def create_environment(config):
     if(len(hosts) == 0):
         collectd.info("create_environment: vCenter " + config.get("name") + " does not contain any hosts. Cannot continue")
         return
+
     host_key = hosts[0][0]
     env['lookup_host'] = env['pm'].get_entity_counters(host_key)
 
@@ -431,17 +437,26 @@ def create_environment(config):
 
     # Now use the lookup tables to find out the IDs of the counter names given
     # via the configuration and store them as an array in the environment.
+    # If host_counters or vm_counters is empty, select all.
     
     env['host_counter_ids'] = []
     if len(config['host_counters']) == 0:
+        collectd.info("create_environment: configured to grab all host counters")
         env['host_counter_ids'] = env['lookup_host'].values()
     else:
         for name in config['host_counters']:
             env['host_counter_ids'].append(env['lookup_host'].get(name))
+    
+    collectd.info("create_environment: configured to grab %d host counters" % (len(env['host_counter_ids'])))
 
     env['vm_counter_ids'] = []
-    for name in config['vm_counters']:
-        env['vm_counter_ids'].append(env['lookup_vm'].get(name))
+    if len(config['vm_counters']) == 0:
+        env['vm_counter_ids'] = env['lookup_vm'].values()
+    else:
+        for name in config['vm_counters']:
+            env['vm_counter_ids'].append(env['lookup_vm'].get(name))
+    
+    collectd.info("create_environment: configured to grab %d vm counters" % (len(env['vm_counter_ids'])))
 
     return env
 
