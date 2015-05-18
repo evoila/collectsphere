@@ -95,7 +95,7 @@ def register_config(func):
 def register_init(func):
     return
 
-def register_read(func):
+def register_read(callback, interval=60):
     return
 
 def register_write(func):

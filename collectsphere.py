@@ -21,6 +21,14 @@ import re
 import datetime
 from pysphere import VIServer
 
+#####################################################################################
+# CONFIGURE ME
+#####################################################################################
+INTERVAL = 120
+
+#####################################################################################
+# DO NOT CHANGE BEYOND THIS POINT!
+#####################################################################################
 CONFIGS = []                                        # Stores the configuration as passed from collectd
 ENVIRONMENT = {}                                    # Runtime data and object cache
 SHUTDOWN_SIGNAL_CONDITION = threading.Condition()   # Used to control the access to SHUTDOWN_SIGNAL by the threads
@@ -40,7 +48,7 @@ def configure_callback(conf):
     port = 443 
     verbose = None
     username = 'root'                   
-    password = 'vmware'                 
+    password = 'vmware'
     host_counters = []
     vm_counters = []
     inventory_refresh_interval = 600  
@@ -90,6 +98,7 @@ def configure_callback(conf):
         'verbose': verbose,
         'username': username,
         'password': password,
+        'interval': interval,
         'host_counters': host_counters,
         'vm_counters': vm_counters,
         'inventory_refresh_interval': inventory_refresh_interval
@@ -675,5 +684,5 @@ class InventoryWatchDog(threading.Thread):
 
 collectd.register_config(configure_callback)
 collectd.register_init(init_callback)
-collectd.register_read(read_callback)
+collectd.register_read(callback=read_callback, interval=INTERVAL)
 collectd.register_shutdown(shutdown_callback)
