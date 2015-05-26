@@ -98,7 +98,6 @@ def configure_callback(conf):
         'verbose': verbose,
         'username': username,
         'password': password,
-        'interval': interval,
         'host_counters': host_counters,
         'vm_counters': vm_counters,
         'inventory_refresh_interval': inventory_refresh_interval
@@ -212,13 +211,7 @@ def read_callback():
                     threads.append(thread)
 
     collectd.info("read_callback: Spawned a total of " + str(len(threads)) + " threads to fetch Host and VM metrics.")
-
-    # Wait for all threads to finish.
-    for th in threads:
-        th.join()
     
-    # Dispatch all gathered values to collectd.
-
     # prepare Value
     cd_value = collectd.Values(plugin="collectsphere")
     cd_value.type = "gauge" 
@@ -226,7 +219,10 @@ def read_callback():
 
     stats_count = 0
 
+    # Wait for threads to finish in FIFO order which should distribute the load
+    # when dispatching values a bit better.
     for th in threads:
+        th.join()
 
         # The thread was spawned with some information that we now need to
         # properly dispatch the values. Fetch that information now.
