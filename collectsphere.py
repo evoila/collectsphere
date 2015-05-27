@@ -19,7 +19,9 @@ import time
 import ssl
 import re
 import datetime
-from pysphere import VIServer
+
+from pyVmomi import *
+from pyVim import connect
 
 #####################################################################################
 # CONFIGURE ME
@@ -115,7 +117,7 @@ def init_callback():
         env = create_environment(config)
       
         inventory = {}
-        thread = InventoryWatchDog(env.get('conn'), env, config.get('inventory_refresh_interval'))
+        thread = InventoryWatchDog(env.get('service_instance'), env, config.get('inventory_refresh_interval'))
         thread.start()
 
         env['inventory'] = inventory
@@ -142,16 +144,6 @@ def read_callback():
         collectd.info("read_callback: entering environment: " + name)
         conn = env['conn']
 
-        # Reconnect to vCenter Server if necessary and give up if a connection
-        # cannot be established.
-        if(conn.is_connected() == False):
-            collectd.info("read_callback: reconnecting")
-            reconnect(name)
-            conn = env['conn']
-            if(conn.is_connected() == False):
-                collectd.info("read_callback: reconnect unsuccessful. Giving up.")
-                continue
-        
         # fetch the instance of perf manager from the object cache
         pm = env['pm']
 
@@ -406,81 +398,85 @@ def create_environment(config):
         }
     """
     
-    url = config.get("host") + ":" + str(config.get("port"))
-    collectd.info("create_environment: URL: " + url)
-
     # Connect to vCenter Server
-    viserver = VIServer()
-    viserver.connect(url, config.get("username"), config.get("password"))
-
-    # If we could not connect abort here
-    if(viserver == None or viserver.is_connected() == False):
+    try:
+        service_instance = connect.SmartConnect(host=config.get("host"), user=config.get("username"), pwd=config.get("password"), port=config.get("port"))
+    except:
         return
 
     # Set up the environment. We fill in the rest afterwards.
     env = {}
-    env['conn'] = viserver
-    env['pm'] = viserver.get_performance_manager()
+    env['service_instance'] = service_instance
+    env['pm'] = service_instance.content.perfManager
 
-    # We need at least one host in the vCenter to be able to fetch the Counter
-    # IDs and establish the lookup table.
-    hosts = viserver.get_hosts().items()
-    if(len(hosts) == 0):
-        collectd.info("create_environment: vCenter " + config.get("name") + " does not contain any hosts. Cannot continue")
-        return
-
-    host_key = hosts[0][0]
-    env['lookup_host'] = env['pm'].get_entity_counters(host_key)
-
-    # The same is true for VMs: We need at least one VM to fetch the Counter IDs.
-    vms = viserver.get_registered_vms(status='poweredOn')
-    if(len(vms) == 0):
-        collectd.info("create_environment: vCenter " + config.get("name") + " does not contain any VMs. Cannot continue")
-        return
-    vm = viserver.get_vm_by_path(vms[0])
-    vm_mor = vm._mor
-    env['lookup_vm'] = env['pm'].get_entity_counters(vm_mor)
+    # Setup lookup tables
+    lookup_host = create_host_metric_lookup_table(service_instance)
+    lookup_vm = create_vm_metric_lookup_table(service_instance)
+    env['lookup_host'] = lookup_host
+    env['lookup_vm'] = lookup_vm
 
     # Now use the lookup tables to find out the IDs of the counter names given
     # via the configuration and store them as an array in the environment.
-    # If host_counters or vm_counters is empty, select all.
-    
+
     env['host_counter_ids'] = []
-    if len(config['host_counters']) == 0:
-        collectd.info("create_environment: configured to grab all host counters")
-        env['host_counter_ids'] = env['lookup_host'].values()
-    else:
-        for name in config['host_counters']:
-            env['host_counter_ids'].append(env['lookup_host'].get(name))
-    
-    collectd.info("create_environment: configured to grab %d host counters" % (len(env['host_counter_ids'])))
+    for name in config['host_counters']:
+        env['host_counter_ids'].append(env['lookup_host'].get(name))
 
     env['vm_counter_ids'] = []
-    if len(config['vm_counters']) == 0:
-        env['vm_counter_ids'] = env['lookup_vm'].values()
-    else:
-        for name in config['vm_counters']:
-            env['vm_counter_ids'].append(env['lookup_vm'].get(name))
+    for name in config['vm_counters']:
+        env['vm_counter_ids'].append(env['lookup_vm'].get(name))
     
     collectd.info("create_environment: configured to grab %d vm counters" % (len(env['vm_counter_ids'])))
+    collectd.info("create_environment: configured to grab %d host counters" % (len(env['host_counter_ids'])))
 
     return env
 
-def reconnect(name):
-    """ This function is used to reconnect to vCenter by a given environment name. """
+def create_vm_metric_lookup_table(service_instance):
+    objView = service_instance.content.viewManager.CreateContainerView(service_instance.content.rootFolder, [vim.VirtualMachine], True)
+    host = objView.view[0]
+    return create_metric_lookup_table(service_instance, host)
 
-    global ENVIRONMENT
+def create_host_metric_lookup_table(service_instance):
+    objView = service_instance.content.viewManager.CreateContainerView(service_instance.content.rootFolder, [vim.HostSystem], True)
+    host = objView.view[0]
+    return create_metric_lookup_table(service_instance, host)
 
-    env = ENVIRONMENT[name]
+def create_metric_lookup_table(service_instance, entity):
+    pm = service_instance.content.perfManager
+    avail_metrics = pm.QueryAvailablePerfMetric(entity, intervalId=20)
 
-    if(env['conn'].is_connected()):
-        return
+    counterIds = []
+    for metric in avail_metrics:
+        counterIds.append(metric.counterId)
 
-    viserver = VIServer()
-    viserver.connect(env['config']['url'], env['config']['login'], env['config']['passwd'])
+    counter_infos = pm.QueryPerfCounter(counterId=counterIds)
+    
+    lookup_table = {}
+    for info in counter_infos:
+        key = info.key
+        name = info.groupInfo.key + '.' + info.nameInfo.key
+        lookup_table[name] = key
 
-    if(viserver.is_connected() == True):
-        env['conn'] = viserver
+    return lookup_table
+
+def get_cluster_list(service_instance, parent=None):
+    if not parent:
+        parent = service_instance.content.rootFolder
+
+    cluster_list = []
+    
+    if isinstance(parent, vim.ClusterComputeResource):
+        cluster_list.append(parent)
+
+    if hasattr(parent, 'childEntity'):
+        for child in parent.childEntity:
+            cluster_list = cluster_list + get_cluster_list(service_instance, child)
+
+    if hasattr(parent, 'hostFolder'):
+        for child in parent.hostFolder.childEntity:
+            cluster_list = cluster_list + get_cluster_list(service_instance, child)
+
+    return cluster_list
 
 #####################################################################################
 # HELPER CLASSES 
@@ -524,13 +520,13 @@ class InventoryWatchDog(threading.Thread):
     current state of the environment. It repeats the inventorization every
     10min by default."""   
 
-    conn = None
+    service_instance = None
     environment = None
     sleepSeconds = None
 
-    def __init__(self, conn, environment, sleepSeconds):
+    def __init__(self, service_instance, environment, sleepSeconds):
         threading.Thread.__init__(self)
-        self.conn = conn
+        self.service_instance = service_instance
         self.environment = environment
         self.sleepSeconds = sleepSeconds
 
@@ -539,7 +535,6 @@ class InventoryWatchDog(threading.Thread):
         # In a infinite loop build the inventory tree
         while True:
             collectd.info("InventoryWatchDog: Running inventory refresh ...")
-
             start_time = time.time()
 
             # fetch or create the inventory
@@ -551,108 +546,38 @@ class InventoryWatchDog(threading.Thread):
             # For every cluster, list the hosts and vms and add them to the
             # inventory if necessary. Remove entires of entities which are not
             # there anymore.
-            for cluster_data in self.conn.get_clusters().items():
-                cluster = cluster_data[0]
-                cluster_name = cluster_data[1]
-
+            
+            clusters = get_cluster_list(self.service_instance)
+            for cluster in clusters:
+                cluster_name = cluster.name
                 collectd.info("InventoryWatchDog: Discovered cluster %s" % (cluster_name))
-
+           
                 # if not already there: store the cluster object itself
                 if not cluster_name in inventory:
-                    collectd.info("InventoryWatchDog: Cluster %s never seen before" % (cluster_name))
+                    collectd.info("InventoryWatchDog:     Cluster %s never seen before" % (cluster_name))
                     inventory[cluster_name] = {
                         'cluster': cluster,
                         'hosts': {},
                         'vms': {},
                     }
-
+                
                 # HOST INVENTORY
                 host_inventory = {}
+                hostView = self.service_instance.content.viewManager.CreateContainerView(container=cluster, type=[vim.HostSystem], recursive=True) 
+                host_list = hostView.view
+                for host in host_list:
+                    host_inventory[host.name] = host
                 
-                # fill it with the hosts
-                host_list = self.conn.get_hosts(cluster).items()
-
-                if len(host_list) == 0:
-                    collectd.info("InventoryWatchDog: Found 0 hosts in cluster %s. Skipping to next cluster" % (cluster_name))
-                    continue
-
-                for hData in self.conn.get_hosts(cluster).items():
-                    host_mor = hData[0]
-                    host_name = hData[1]
-                    host_inventory[host_name] = host_mor
-                
-                collectd.info("InventoryWatchDog: Found %d hosts in cluster %s" % (len(host_inventory.keys()), cluster_name))
+                collectd.info("InventoryWatchDog:     Found %d hosts in cluster %s" % (len(host_inventory.keys()), cluster_name))
 
                 # VM INVENTORY
-
-                # As we are working on the inventory dictionary but dont want
-                # the main thread to spawn threads to fetch metrics for object
-                # that are not fully discovered yet, we have to work on a copy
-                # of the vm_inventory and then swap it with the original
-                vm_inventory = inventory.get(cluster_name).get('vms').copy()
-
-                # fetch list of vm paths (this is very quick)
-                vm_path_list = self.conn.get_registered_vms(cluster=cluster)
-
-                collectd.info("InventoryWatchDog: Found %d registered VMs in cluster %s" % (len(vm_path_list), cluster_name))
+                vm_inventory = {}
+                vmView = self.service_instance.content.viewManager.CreateContainerView(container=cluster, type=[vim.VirtualMachine], recursive=True) 
+                vm_list = vmView.view
+                for vm in vm_list:
+                    vm_inventory[vm.name] = vm
                 
-                # Remove all VMs from the inventory cache that are not listed
-                # in vSphere anymore
-                removed = 0
-                for vm_path in vm_inventory.keys():
-                    if not vm_path in vm_path_list:
-                        vm_inventory.pop(vm_path)
-                        removed += 1
-
-                collectd.info("InventoryWatchDog: Removed %d VMs from my inventory cache" % (removed))
-
-                # Generate list of VM paths that need to be added to the
-                # inventory
-                new_vms = []
-                for vm_path in vm_path_list:
-                    if not vm_path in vm_inventory:
-                        new_vms.append(vm_path)
-
-                collectd.info("InventoryWatchDog: Adding %d VMs to cache. Spawning threads..." % (len(new_vms)))
-
-                # Spawn threads to fetch the VM object of every VM that is in
-                # the unknown list
-                max_threads = INVENTORY_DISCOVERY_THREADS
-                start_index = 0
-                end_index = -1
-
-                while end_index < (len(new_vms)-1):
-
-                    # calculate the end index
-                    end_index = start_index + max_threads - 1
-                    if(end_index > (len(new_vms)-1)):
-                        end_index = len(new_vms)-1
-                
-                    # get the subset of vm paths
-                    current_vm_paths = new_vms[start_index:end_index + 1]
-                    
-                    # spawn threads
-                    threads = []
-                    for vm_path in current_vm_paths:
-                        thread = GetVMThread(vm_path, self.conn)
-                        thread.start()
-                        threads.append(thread)
-                
-                    collectd.info("InventoryWatchDog: Spawned %d threads (%d - %d) to fetch VM objects in cluster %s" % (len(threads), start_index, end_index, cluster_name))
-                
-                    # Wait for the threads to finish, the put the VM MORs into the
-                    # inventory
-                    for thread in threads:
-                        thread.join()
-                        if thread.get_vm:
-                            vm_path = thread.vm_path
-                            vm = thread.get_vm()
-                            vm_inventory[vm_path] = vm
-                   
-                    # set start_index to the next element for the next run
-                    start_index = end_index + 1
-
-                collectd.info("InventoryWatchDog: All threads returned. Publishing inventory...")
+                collectd.info("InventoryWatchDog:     Found %d VMs in cluster %s" % (len(vm_inventory.keys()), cluster_name))
 
                 # PUBLISH THE NEW INVENTORY
                 inventory.get(cluster_name)['hosts'] = host_inventory
@@ -661,7 +586,7 @@ class InventoryWatchDog(threading.Thread):
             end_time = time.time()
             elapsed_time = end_time - start_time
 
-            collectd.info("InventoryWatchDog: Discovered %d hosts and %d VMs in %d clusters in %d seconds. Next refresh in %d seonds." % (
+            collectd.info("InventoryWatchDog: Discovered %d hosts and %d VMs in %d clusters in %d seconds. Next refresh in %d seconds." % (
                 len(inventory[cluster_name]['hosts'].keys()),
                 len(inventory[cluster_name]['vms'].keys()),
                 len(inventory.keys()),
