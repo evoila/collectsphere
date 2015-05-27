@@ -27,15 +27,21 @@ from pyVim import connect
 # CONFIGURE ME
 #####################################################################################
 INTERVAL = 120
-INVENTORY_DISCOVERY_THREADS = 40
 
 #####################################################################################
 # DO NOT CHANGE BEYOND THIS POINT!
 #####################################################################################
-CONFIGS = []                                        # Stores the configuration as passed from collectd
-ENVIRONMENT = {}                                    # Runtime data and object cache
-SHUTDOWN_SIGNAL_CONDITION = threading.Condition()   # Used to control the access to SHUTDOWN_SIGNAL by the threads
-SHUTDOWN_SIGNAL = False; 		                    # Used to signal the shutdown to the spawned threads
+# Stores the configuration as passed from collectd
+CONFIGS = []                                        
+
+# Runtime data and object cache
+ENVIRONMENT = {}                                    
+
+# Used to control the access to SHUTDOWN_SIGNAL by the threads
+SHUTDOWN_SIGNAL_CONDITION = threading.Condition()   
+
+# Used to signal the shutdown to the spawned threads
+SHUTDOWN_SIGNAL = False; 		                    
 
 #####################################################################################
 # IMPLEMENTATION OF COLLECTD CALLBACK FUNCTIONS 
@@ -114,16 +120,16 @@ def init_callback():
     # For every set of configuration received from collectd, a environment must
     # be created. Further, a inventory watch dog thread has to be spawned.
     for config in CONFIGS:
+        # create environment
         env = create_environment(config)
       
-        inventory = {}
+        # spawn watch dog thread
         thread = InventoryWatchDog(env.get('service_instance'), env, config.get('inventory_refresh_interval'))
         thread.start()
 
-        env['inventory'] = inventory
+        # save to environment
+        env['inventory'] = {}
         env['watchdog'] = thread
-
-        # The environment is stored under the name of the config block
         ENVIRONMENT[config.get("name")] = env
  
 def read_callback():
@@ -146,14 +152,11 @@ def read_callback():
         pm = env['pm']
 
         # Host Metrics: Walk the _host_ inventory tree created by the inventory
-        # watch dog and spawn a thread for every host.
+        # watch dog 
         
         host_counter_ids = env.get('host_counter_ids')
         vm_counter_ids = env.get('vm_counter_ids')
         inventory = env.get('inventory')
-
-        collectd.info("read_callback: host_counter_ids = " + host_counter_ids)
-        collectd.info("read_callback: vm_counter_ids = " + vm_counter_ids)
 
         # See if there is something to monitor in the environment
         host_count = 0
@@ -169,11 +172,9 @@ def read_callback():
         else:
             collectd.info("read_callback: found %d hosts and %d VMs in the inventory cache" % (host_count, vm_count))
 
-        # Only do this if the inventory tree is not empty. If is isn't: for
-        # every host in every cluster spawn a thread.
+        # Only do this if the inventory tree is not empty.
         if inventory:
             for cluster_name in inventory.keys():
-               
                 collectd.info("read_callback: Cluster %s: Spawning %d threads to fetch host metrics." % (cluster_name, len(inventory.get(cluster_name).get('hosts').keys())))
 
                 # Spawn threads for every host
@@ -185,26 +186,29 @@ def read_callback():
                     # create thread and execute
                     thread = GetMetricsThread(pm, host, host_counter_ids, name, cluster_name, 'host', host_name.split('.')[0])
                     thread.start()
-        
+    
                     # append the thread to the list of threads
                     threads.append(thread)
                 
                 collectd.info("read_callback: Cluster %s: Spawning %d threads to fetch VM metrics." % (cluster_name, len(inventory.get(cluster_name).get('vms').keys())))
                 
                 # Spawn threads for every VM
-                for vm_path in inventory.get(cluster_name).get('vms').keys():
+                for vm_name in inventory.get(cluster_name).get('vms').keys():
                     
                     # fetch the VM
-                    vm = inventory.get(cluster_name).get('vms').get(vm_path)
+                    vm = inventory.get(cluster_name).get('vms').get(vm_name)
 
                     # create thread and execute
-                    thread = GetMetricsThread(pm, vm._mor, vm_counter_ids, name, cluster_name, 'vm', vm.get_properties().get('name'))
+                    thread = GetMetricsThread(pm, vm, vm_counter_ids, name, cluster_name, 'vm', vm.name)
                     thread.start()
 
                     # append the thread to the list of threads
                     threads.append(thread)
 
     collectd.info("read_callback: Spawned a total of " + str(len(threads)) + " threads to fetch Host and VM metrics.")
+
+    #TODO
+    return
     
     # prepare Value
     cd_value = collectd.Values(plugin="collectsphere")
@@ -411,18 +415,13 @@ def create_environment(config):
     env['service_instance'] = service_instance
     env['pm'] = service_instance.content.perfManager
 
-    # Setup lookup tables
-    lookup_host = create_host_metric_lookup_table(service_instance)
-    lookup_vm = create_vm_metric_lookup_table(service_instance)
-    env['lookup_host'] = lookup_host
-    env['lookup_vm'] = lookup_vm
-
-    print lookup_host
-    print lookup_vm
+    # Setup lookup tables. They map names like "cpu.usage" to instances of
+    # MetricId which we will need later to query for the values.
+    env['lookup_host'] = create_host_metric_lookup_table(service_instance)
+    env['lookup_vm'] = create_vm_metric_lookup_table(service_instance)
 
     # Now use the lookup tables to find out the IDs of the counter names given
     # via the configuration and store them as an array in the environment.
-
     env['host_counter_ids'] = []
     for name in config['host_counters']:
         env['host_counter_ids'].append(env['lookup_host'].get(name))
