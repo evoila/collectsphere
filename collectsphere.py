@@ -25,6 +25,7 @@ from pysphere import VIServer
 # CONFIGURE ME
 #####################################################################################
 INTERVAL = 120
+INVENTORY_DISCOVERY_THREADS = 40
 
 #####################################################################################
 # DO NOT CHANGE BEYOND THIS POINT!
@@ -616,7 +617,7 @@ class InventoryWatchDog(threading.Thread):
 
                 # Spawn threads to fetch the VM object of every VM that is in
                 # the unknown list
-                max_threads = 50
+                max_threads = INVENTORY_DISCOVERY_THREADS
                 start_index = 0
                 end_index = -1
 
