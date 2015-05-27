@@ -134,15 +134,13 @@ def read_callback():
     # keep track of own execution time
     start_time = time.time()
 
-    # We are going to spawn a lot of threads soon to speed up metric fetching.
-    # References to the threads are stored here.
     threads = []
     
     # Walk through the existing environments
     for name in ENVIRONMENT.keys():
         env = ENVIRONMENT[name]
         collectd.info("read_callback: entering environment: " + name)
-        conn = env['conn']
+        service_instance = env['service_instance']
 
         # fetch the instance of perf manager from the object cache
         pm = env['pm']
@@ -153,6 +151,9 @@ def read_callback():
         host_counter_ids = env.get('host_counter_ids')
         vm_counter_ids = env.get('vm_counter_ids')
         inventory = env.get('inventory')
+
+        collectd.info("read_callback: host_counter_ids = " + host_counter_ids)
+        collectd.info("read_callback: vm_counter_ids = " + vm_counter_ids)
 
         # See if there is something to monitor in the environment
         host_count = 0
@@ -369,7 +370,8 @@ def create_environment(config):
             
             # This stores the IDs of the counter names passed via the
             # configuration block. We used the lookup tables above to fill in
-            # the IDs.
+            # the IDs. IDs come as MetricId objects
+
             'host_counter_ids': [<ID>, <ID>, ...],
             'vm_counter_ids': [<ID>, <ID>, ...],
 
@@ -415,6 +417,9 @@ def create_environment(config):
     env['lookup_host'] = lookup_host
     env['lookup_vm'] = lookup_vm
 
+    print lookup_host
+    print lookup_vm
+
     # Now use the lookup tables to find out the IDs of the counter names given
     # via the configuration and store them as an array in the environment.
 
@@ -443,19 +448,22 @@ def create_host_metric_lookup_table(service_instance):
 
 def create_metric_lookup_table(service_instance, entity):
     pm = service_instance.content.perfManager
-    avail_metrics = pm.QueryAvailablePerfMetric(entity, intervalId=20)
 
-    counterIds = []
-    for metric in avail_metrics:
-        counterIds.append(metric.counterId)
+    # List of vim.PerformanceManager.MetricId
+    avail_metricsIds = pm.QueryAvailablePerfMetric(entity, intervalId=20)
 
-    counter_infos = pm.QueryPerfCounter(counterId=counterIds)
-    
+    metricId_map = {}
+    for metricId in avail_metricsIds:
+        metricId_map[metricId.counterId] = metricId
+
+    # List of vim.PerformanceManager.CounterInfo
+    counter_infos = pm.QueryPerfCounter(counterId=metricId_map.keys())
+
     lookup_table = {}
     for info in counter_infos:
         key = info.key
         name = info.groupInfo.key + '.' + info.nameInfo.key
-        lookup_table[name] = key
+        lookup_table[name] = metricId_map.get(key)
 
     return lookup_table
 
