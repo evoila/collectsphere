@@ -190,7 +190,7 @@ def read_callback():
                     host = inventory.get(cluster_name).get('hosts').get(host_name)
                    
                     # create thread and execute
-                    thread = GetMetricsThread(pm, host, host_counter_ids, name, cluster_name, 'host', host_name.split('.')[0])
+                    thread = GetMetricsThread(pm, host, host_counter_ids, name, cluster_name, 'host')
                     thread.start()
     
                     # append the thread to the list of threads
@@ -205,7 +205,7 @@ def read_callback():
                     vm = inventory.get(cluster_name).get('vms').get(vm_name)
 
                     # create thread and execute
-                    thread = GetMetricsThread(pm, vm, vm_counter_ids, name, cluster_name, 'vm', vm.name)
+                    thread = GetMetricsThread(pm, vm, vm_counter_ids, name, cluster_name, 'vm')
                     thread.start()
 
                     # append the thread to the list of threads
@@ -426,6 +426,9 @@ def create_environment(config):
     env['lookup_host'] = create_host_metric_lookup_table(service_instance)
     env['lookup_vm'] = create_vm_metric_lookup_table(service_instance)
 
+    collectd.info("Lookup table for host metrics contains %d entries." % (len(env['lookup_host'].keys())))
+    collectd.info("Lookup table for vm metrics contains %d entries." % (len(env['lookup_vm'].keys())))
+
     # Now use the lookup tables to find out the IDs of the counter names given
     # via the configuration and store them as an array in the environment.
     env['host_counter_ids'] = []
@@ -439,6 +442,8 @@ def create_environment(config):
     collectd.info("create_environment: configured to grab %d vm counters" % (len(env['vm_counter_ids'])))
     collectd.info("create_environment: configured to grab %d host counters" % (len(env['host_counter_ids'])))
 
+    print env['vm_counter_ids']
+    
     return env
 
 def create_vm_metric_lookup_table(service_instance):
@@ -495,11 +500,16 @@ def get_cluster_list(service_instance, parent=None):
 # HELPER CLASSES 
 #####################################################################################
 
+class Metric
+
+    def __init__(self, metric_name, value, timestamp, container, entity, instance)
+        return
+
 class GetMetricsThread(threading.Thread):
     """ This thread takes parameters necessary to fetch the metrics of a single
     host and later identify the source of the data once the thread is done. """
 
-    def __init__(self, pm, entity, metric_ids, vc_name, cluster_name, entity_type, entity_name):
+    def __init__(self, pm, entity, metric_ids, vc_name, cluster_name, entity_type):
         threading.Thread.__init__(self)
         self.pm = pm
         self.entity = entity
@@ -507,18 +517,29 @@ class GetMetricsThread(threading.Thread):
         self.vc_name = vc_name
         self.cluster_name = cluster_name
         self.entity_type = entity_type
-        self.entity_name = entity_name
-
-        self.timestamp = None
-        self.value = None
+        self.data = None
 
     def run(self):
         refreshRate = self.pm.QueryPerfProviderSummary(entity=self.entity).refreshRate
-        perfQuerySpec = vim.PerformanceManager.QuerySpec(entity=self.entity, metricId=self.metric_ids, intervalId=refreshRate)
+
+        metricIds = []
+        for id in self.metric_ids:
+            metricIds.append(vim.PerformanceManager.MetricId(counterId=2, instance="*"))
+
+        perfQuerySpec = vim.PerformanceManager.QuerySpec(entity=self.entity, metricId=metricIds, intervalId=refreshRate, maxSample=1)
         perf = self.pm.QueryPerf([perfQuerySpec])
 
-        self.timestamp = perf[0].sampleInfo[-1].timestamp
-        self.value = perf[0].value[0].value[-1]
+        entityMetric = perf[0]
+        timestamp = entityMetric.sampleInfo.timestamp
+
+
+
+        print perf
+
+        #data = {}
+        #for sampleInfo in perf[0].sampleInfo:
+        #    timestamp = sampleInfo.timestamp
+        return
 
 class InventoryWatchDog(threading.Thread):
     """ The Inventory Watch Dog is a thread that is spawned for every vCenter
