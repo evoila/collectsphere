@@ -158,12 +158,18 @@ def read_callback():
         vm_counter_ids = env.get('vm_counter_ids')
         inventory = env.get('inventory')
 
+        collectd.info("Found %d host counter IDs" % (len(host_counter_ids)))
+        collectd.info("Found %d vm counter IDs" % (len(vm_counter_ids)))
+
         # See if there is something to monitor in the environment
         host_count = 0
         vm_count = 0
         for cluster_name in inventory.keys():
             host_count += len(inventory.get(cluster_name).get('hosts'))
             vm_count += len(inventory.get(cluster_name).get('vms'))
+    
+        collectd.info("Found %d hosts in the intentory" % (host_count))
+        collectd.info("Found %d vms in the intentory" % (vm_count))
 
         # If 0 clusters or no vms and hosts where discovered, skip to the next environment
         if (host_count == 0 and vm_count == 0):
@@ -356,13 +362,13 @@ def create_environment(config):
     structure pattern:
 
         {
-            'conn': <INSTANCE OF VIServer FROM THE PYSPHERE API>,
+            'service_instance': <INSTANCE OF VIServer FROM THE PYSPHERE API>,
             'pm': <INSTANCE OF THE PERFORMANCE MANAGER>,
                 
             # This is a dictionary that stores mappings of performance counter
             # names to their respective IDs in vCenter.
             'lookup_host': {    
-                'NAME': <ID>,       # Example: 'cpu.usage': 2
+                'NAME': <ID>,       # Example: 'cpu.usage': <instance of vim.MetricId>
                 ...
             },
 
@@ -387,13 +393,13 @@ def create_environment(config):
             # API call to fetch metrics.
             'inventory': {
                 <CLUSTER_NAME>: {
-                    'cluster': <CLUSTER MOR>,
+                    'cluster': <CLUSTER>,
                     'hosts': {
-                        <HOST_NAME>: <HOST MOR>,
+                        <HOST_NAME>: <HOST>,
                         ...
                     },
                     'vms': {
-                        <VM_NAME>: <VM MOR>,
+                        <VM_NAME>: <VM>,
                         ...
                     }
                 }
@@ -462,7 +468,7 @@ def create_metric_lookup_table(service_instance, entity):
     for info in counter_infos:
         key = info.key
         name = info.groupInfo.key + '.' + info.nameInfo.key
-        lookup_table[name] = metricId_map.get(key)
+        lookup_table[name] = key
 
     return lookup_table
 
@@ -489,37 +495,30 @@ def get_cluster_list(service_instance, parent=None):
 # HELPER CLASSES 
 #####################################################################################
 
-class GetVMThread(threading.Thread):
-    
-    def __init__(self, vm_path, conn):
-        threading.Thread.__init__(self)
-        self.vm_path = vm_path
-        self.conn = conn
-
-    def run(self):
-        self.vm = self.conn.get_vm_by_path(self.vm_path)
-
-    def get_vm(self):
-        return self.vm
-
 class GetMetricsThread(threading.Thread):
     """ This thread takes parameters necessary to fetch the metrics of a single
     host and later identify the source of the data once the thread is done. """
 
-    def __init__(self, pm, entity_key, metric_ids, vc_name, cluster_name, entity_type, entity_name):
+    def __init__(self, pm, entity, metric_ids, vc_name, cluster_name, entity_type, entity_name):
         threading.Thread.__init__(self)
         self.pm = pm
-        self.entity_key = entity_key
+        self.entity = entity
         self.metric_ids = metric_ids
         self.vc_name = vc_name
         self.cluster_name = cluster_name
         self.entity_type = entity_type
         self.entity_name = entity_name
 
+        self.timestamp = None
+        self.value = None
+
     def run(self):
-        # The API call is very simple thanks to pysphere :)
-        self.stats = None
-        self.stats = self.pm.get_entity_statistic(self.entity_key, self.metric_ids, None, False)
+        refreshRate = self.pm.QueryPerfProviderSummary(entity=self.entity).refreshRate
+        perfQuerySpec = vim.PerformanceManager.QuerySpec(entity=self.entity, metricId=self.metric_ids, intervalId=refreshRate)
+        perf = self.pm.QueryPerf([perfQuerySpec])
+
+        self.timestamp = perf[0].sampleInfo[-1].timestamp
+        self.value = perf[0].value[0].value[-1]
 
 class InventoryWatchDog(threading.Thread):
     """ The Inventory Watch Dog is a thread that is spawned for every vCenter
