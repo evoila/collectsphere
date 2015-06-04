@@ -533,9 +533,98 @@ class InventoryWatchDog(threading.Thread):
         self.conn = conn
         self.environment = environment
         self.sleepSeconds = sleepSeconds
+    
+    # HOST INVENTORY
+    def update_host_inventory(self, cluster):
+        host_inventory = {}
+                
+        # fill it with the hosts
+        host_list = self.conn.get_hosts(cluster).items()
+
+        if len(host_list) == 0:
+            collectd.info("InventoryWatchDog: Found 0 hosts in cluster")
+            return host_inventory
+
+        for hData in self.conn.get_hosts(cluster).items():
+            host_mor = hData[0]
+            host_name = hData[1]
+            host_inventory[host_name] = host_mor
+                
+        collectd.info("InventoryWatchDog: Found %d hosts in cluster." % (len(host_inventory.keys())))
+        return host_inventory
+
+    # VM INVENTORY
+    def update_vm_inventory(self, cluster, vm_inventory_old):
+        # As we are working on the inventory dictionary but dont want
+        # the main thread to spawn threads to fetch metrics for object
+        # that are not fully discovered yet, we have to work on a copy
+        # of the vm_inventory and then swap it with the original
+        vm_inventory = vm_inventory_old.copy()
+
+        # fetch list of vm paths (this is very quick)
+        vm_path_list = self.conn.get_registered_vms(cluster=cluster)
+
+        # Remove all VMs from the inventory cache that are not listed
+        # in vSphere anymore
+        removed = 0
+        for vm_path in vm_inventory.keys():
+            if not vm_path in vm_path_list:
+                vm_inventory.pop(vm_path)
+                removed += 1
+
+        collectd.info("InventoryWatchDog: Removed %d VMs from my inventory cache" % (removed))
+
+        # Generate list of VM paths that need to be added to the
+        # inventory
+        new_vms = []
+        for vm_path in vm_path_list:
+            if not vm_path in vm_inventory:
+                new_vms.append(vm_path)
+
+        collectd.info("InventoryWatchDog: Adding %d VMs to cache. Spawning threads..." % (len(new_vms)))
+
+        # Spawn threads to fetch the VM object of every VM that is in
+        # the unknown list
+        max_threads = INVENTORY_DISCOVERY_THREADS
+        start_index = 0
+        end_index = -1
+
+        while end_index < (len(new_vms)-1):
+
+            # calculate the end index
+            end_index = start_index + max_threads - 1
+            if(end_index > (len(new_vms)-1)):
+                end_index = len(new_vms)-1
+                
+            # get the subset of vm paths
+            current_vm_paths = new_vms[start_index:end_index + 1]
+                    
+            # spawn threads
+            threads = []
+            for vm_path in current_vm_paths:
+                thread = GetVMThread(vm_path, self.conn)
+                thread.start()
+                threads.append(thread)
+                
+            collectd.info("InventoryWatchDog: Spawned %d threads (%d - %d) to fetch VM objects in cluster" % (len(threads), start_index, end_index))
+
+            # Wait for the threads to finish, the put the VM MORs into the
+            # inventory
+            for thread in threads:
+                thread.join()
+                if thread.get_vm:
+                    vm_path = thread.vm_path
+                    vm = thread.get_vm()
+                    vm_inventory[vm_path] = vm
+                   
+            # set start_index to the next element for the next run
+            start_index = end_index + 1
+
+            collectd.info("InventoryWatchDog: All threads returned. Publishing inventory...")
+
+        return vm_inventory
 
     def run(self):
-    
         # In a infinite loop build the inventory tree
         while True:
             collectd.info("InventoryWatchDog: Running inventory refresh ...")
@@ -565,94 +654,9 @@ class InventoryWatchDog(threading.Thread):
                         'hosts': {},
                         'vms': {},
                     }
-
-                # HOST INVENTORY
-                host_inventory = {}
-                
-                # fill it with the hosts
-                host_list = self.conn.get_hosts(cluster).items()
-
-                if len(host_list) == 0:
-                    collectd.info("InventoryWatchDog: Found 0 hosts in cluster %s. Skipping to next cluster" % (cluster_name))
-                    continue
-
-                for hData in self.conn.get_hosts(cluster).items():
-                    host_mor = hData[0]
-                    host_name = hData[1]
-                    host_inventory[host_name] = host_mor
-                
-                collectd.info("InventoryWatchDog: Found %d hosts in cluster %s" % (len(host_inventory.keys()), cluster_name))
-
-                # VM INVENTORY
-
-                # As we are working on the inventory dictionary but dont want
-                # the main thread to spawn threads to fetch metrics for object
-                # that are not fully discovered yet, we have to work on a copy
-                # of the vm_inventory and then swap it with the original
-                vm_inventory = inventory.get(cluster_name).get('vms').copy()
-
-                # fetch list of vm paths (this is very quick)
-                vm_path_list = self.conn.get_registered_vms(cluster=cluster)
-
-                collectd.info("InventoryWatchDog: Found %d registered VMs in cluster %s" % (len(vm_path_list), cluster_name))
-                
-                # Remove all VMs from the inventory cache that are not listed
-                # in vSphere anymore
-                removed = 0
-                for vm_path in vm_inventory.keys():
-                    if not vm_path in vm_path_list:
-                        vm_inventory.pop(vm_path)
-                        removed += 1
-
-                collectd.info("InventoryWatchDog: Removed %d VMs from my inventory cache" % (removed))
-
-                # Generate list of VM paths that need to be added to the
-                # inventory
-                new_vms = []
-                for vm_path in vm_path_list:
-                    if not vm_path in vm_inventory:
-                        new_vms.append(vm_path)
-
-                collectd.info("InventoryWatchDog: Adding %d VMs to cache. Spawning threads..." % (len(new_vms)))
-
-                # Spawn threads to fetch the VM object of every VM that is in
-                # the unknown list
-                max_threads = INVENTORY_DISCOVERY_THREADS
-                start_index = 0
-                end_index = -1
-
-                while end_index < (len(new_vms)-1):
-
-                    # calculate the end index
-                    end_index = start_index + max_threads - 1
-                    if(end_index > (len(new_vms)-1)):
-                        end_index = len(new_vms)-1
-                
-                    # get the subset of vm paths
-                    current_vm_paths = new_vms[start_index:end_index + 1]
-                    
-                    # spawn threads
-                    threads = []
-                    for vm_path in current_vm_paths:
-                        thread = GetVMThread(vm_path, self.conn)
-                        thread.start()
-                        threads.append(thread)
-                
-                    collectd.info("InventoryWatchDog: Spawned %d threads (%d - %d) to fetch VM objects in cluster %s" % (len(threads), start_index, end_index, cluster_name))
-                
-                    # Wait for the threads to finish, the put the VM MORs into the
-                    # inventory
-                    for thread in threads:
-                        thread.join()
-                        if thread.get_vm:
-                            vm_path = thread.vm_path
-                            vm = thread.get_vm()
-                            vm_inventory[vm_path] = vm
-                   
-                    # set start_index to the next element for the next run
-                    start_index = end_index + 1
-
-                collectd.info("InventoryWatchDog: All threads returned. Publishing inventory...")
+            
+                host_inventory = self.update_host_inventory(cluster)
+                vm_inventory = self.update_vm_inventory(cluster, inventory.get(cluster_name)['vms'])
 
                 # PUBLISH THE NEW INVENTORY
                 inventory.get(cluster_name)['hosts'] = host_inventory
