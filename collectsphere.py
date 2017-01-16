@@ -12,18 +12,16 @@ make the plugin a lot faster.
 """
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
 
-import collectd
-import logging
-import threading
-import time
-import ssl
-import re
 import datetime
+import re
 import ssl
+import time
 
-from pyVim.connect import SmartConnect, Disconnect
+from pyVim.connect import SmartConnect
 from pyVmomi import vim
-from time import localtime
+
+import collectd
+
 
 ################################################################################
 # CONFIGURE ME
@@ -35,6 +33,7 @@ INTERVAL = 300
 ################################################################################
 CONFIGS = []  # Stores the configuration as passed from collectd
 ENVIRONMENT = {}  # Runtime data and object cache
+
 
 ################################################################################
 # IMPLEMENTATION OF COLLECTD CALLBACK FUNCTIONS
@@ -91,11 +90,14 @@ def configure_callback(conf):
         elif key == 'inventory_refresh_interval':
             inventory_refresh_interval = int(val[0])
         else:
-            collectd.warning('collectsphere plugin: Unknown config key: %s.' 
+            collectd.warning('collectsphere plugin: Unknown config key: %s.'
                              % key)
             continue
 
-    collectd.info('configure_callback: Loaded config: name=%s, host=%s, port=%s, verbose=%s, username=%s, password=%s, host_metrics=%s, vm_metrics=%s, inventory_refresh_interval=%s' % (name, host, port, verbose, username, "******", len(host_counters), len(vm_counters), inventory_refresh_interval))
+    collectd.info(
+        'configure_callback: Loaded config: name=%s, host=%s, port=%s, verbose=%s, username=%s, password=%s, host_metrics=%s, vm_metrics=%s, inventory_refresh_interval=%s' % (
+            name, host, port, verbose, username, "******", len(host_counters),
+            len(vm_counters), inventory_refresh_interval))
 
     CONFIGS.append({
         'name': name,
@@ -110,6 +112,7 @@ def configure_callback(conf):
         'inventory_refresh_interval': inventory_refresh_interval
     })
 
+
 def init_callback():
     """ In this method we create environments for every configured vCenter
     Server. This includes creating the connection, reading in counter ID
@@ -123,6 +126,7 @@ def init_callback():
         # The environment is stored under the name of the config block
         ENVIRONMENT[config.get("name")] = env
 
+
 def read_callback():
     """ This function is regularly executed by collectd. It is important to
     minimize the execution time of the function which is why a lot of caching
@@ -134,7 +138,8 @@ def read_callback():
         collectd.info("read_callback: entering environment: " + name)
 
         # Connects to vCenter Server
-        serviceInstance = SmartConnect(host = env["host"], user = env["username"], pwd = env["password"])
+        serviceInstance = SmartConnect(host=env["host"], user=env["username"],
+                                       pwd=env["password"])
         performanceManager = serviceInstance.RetrieveServiceContent().perfManager
 
         # Walk through all Clusters of Datacenter
@@ -144,17 +149,26 @@ def read_callback():
                     if cluster._wsdlName == "ClusterComputeResource":
 
                         # Walk throug all hosts in cluster, collect its metrics and dispatch them
-                        collectd.info("read_callback: found %d hosts in cluster %s" % (len(cluster.host), cluster.name))
-                        colletMetricsForEntities(performanceManager, env['host_counter_ids'], cluster.host, cluster._moId)
+                        collectd.info(
+                            "read_callback: found %d hosts in cluster %s" % (
+                                len(cluster.host), cluster.name))
+                        colletMetricsForEntities(performanceManager,
+                                                 env['host_counter_ids'],
+                                                 cluster.host, cluster._moId)
 
                         # Walk throug all vms in host, collect its metrics and dispatch them
                         for host in cluster.host:
                             if host._wsdlName == "HostSystem":
-                                collectd.info("read_callback: found %d vms in host %s" % (len(host.vm), host.name))
-                                colletMetricsForEntities(performanceManager, env['vm_counter_ids'], host.vm, cluster._moId)
+                                collectd.info(
+                                    "read_callback: found %d vms in host %s" % (
+                                        len(host.vm), host.name))
+                                colletMetricsForEntities(performanceManager,
+                                                         env['vm_counter_ids'],
+                                                         host.vm, cluster._moId)
 
-def colletMetricsForEntities(performanceManager, filteredMetricIds, entities, cluster_name):
 
+def colletMetricsForEntities(performanceManager, filteredMetricIds, entities,
+                             cluster_name):
     # Definition of the queries for getting performance data from vCenter
     qSpecs = []
     qSpec = vim.PerformanceManager.QuerySpec()
@@ -163,7 +177,7 @@ def colletMetricsForEntities(performanceManager, filteredMetricIds, entities, cl
     # Define the default time range in which the data should be collected (from
     # now to INTERVAL seconds)
     endTime = datetime.datetime.today()
-    startTime = datetime.datetime.today() - datetime.timedelta(seconds = INTERVAL)
+    startTime = datetime.datetime.today() - datetime.timedelta(seconds=INTERVAL)
     qSpec.endTime = endTime
     qSpec.startTime = startTime
     # Define the interval, in seconds, for the performance statistics. This
@@ -185,7 +199,7 @@ def colletMetricsForEntities(performanceManager, filteredMetricIds, entities, cl
     collectd.info("GetMetricsForEntities: collecting its stats")
     metricsOfEntities = performanceManager.QueryPerf(qSpecs)
 
-    cd_value = collectd.Values(plugin = "collectsphere")
+    cd_value = collectd.Values(plugin="collectsphere")
     cd_value.type = "gauge"
 
     # Walk throug all entites of query
@@ -195,12 +209,13 @@ def colletMetricsForEntities(performanceManager, filteredMetricIds, entities, cl
         # For every queried metric per entity, get an array consisting of
         # performance counter information for the specified counterIds.
         queriedCounterIdsPerEntity = []
-        for metric in metricsOfEntity :
+        for metric in metricsOfEntity:
             queriedCounterIdsPerEntity.append(metric.id.counterId)
-        perfCounterInfoList = performanceManager.QueryPerfCounter(queriedCounterIdsPerEntity)
+        perfCounterInfoList = performanceManager.QueryPerfCounter(
+            queriedCounterIdsPerEntity)
 
         # Walk thorug all queried metrics per entity
-        for o in range(len(metricsOfEntity)) :
+        for o in range(len(metricsOfEntity)):
             metric = metricsOfEntity[o]
 
             perfCounterInfo = perfCounterInfoList[o]
@@ -211,12 +226,13 @@ def colletMetricsForEntities(performanceManager, filteredMetricIds, entities, cl
             rollupType = perfCounterInfo.rollupType
 
             # Walk throug all values of a metric (INTERVAL / qSpec.intervalId values)
-            for i in range(len(metric.value)) :
+            for i in range(len(metric.value)):
                 value = float(metric.value[i])
 
                 # Get the timestamp of value. Because of an issue by VMware the
                 # has to be add an hour if you're at DST
-                timestamp = float(time.mktime(metricsOfEntities[p].sampleInfo[i].timestamp.timetuple()))
+                timestamp = float(time.mktime(
+                    metricsOfEntities[p].sampleInfo[i].timestamp.timetuple()))
                 timestamp += time.localtime().tm_isdst * (3600)
                 cd_value.time = timestamp
 
@@ -232,14 +248,19 @@ def colletMetricsForEntities(performanceManager, filteredMetricIds, entities, cl
                 instance = "all" if instance == "" else instance
                 unit = truncate(unit)
                 group = truncate(group)
-                if rollupType == vim.PerformanceManager.CounterInfo.RollupType.maximum :
+                if rollupType == vim.PerformanceManager.CounterInfo.RollupType.maximum:
                     print ""
                 rollupType = truncate(rollupType)
-                type_instance_str = cluster_name + "." + entities[p]._wsdlName + "." + entities[p]._moId + "." + group + "." + instance + "." + rollupType + "." + counter + "." + unit
+                type_instance_str = cluster_name + "." + entities[
+                    p]._wsdlName + "." + entities[
+                                        p]._moId + "." + group + "." + instance + "." + rollupType + "." + counter + "." + unit
                 type_instance_str = type_instance_str.replace(' ', '_')
 
                 # now dispatch to collectd
-                cd_value.dispatch(time = timestamp, type_instance = type_instance_str, values = [value])
+                cd_value.dispatch(time=timestamp,
+                                  type_instance=type_instance_str,
+                                  values=[value])
+
 
 def shutdown_callback():
     """ Called by collectd on shutdown. """
@@ -266,7 +287,9 @@ def truncate(str):
             str = id_type + identifier[-12:]
 
     # vCloud Director naming pattern
-    m = re.match('^(.*)\s\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)(.*)$', str, re.IGNORECASE)
+    m = re.match(
+        '^(.*)\s\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)(.*)$',
+        str, re.IGNORECASE)
     if m:
         vm_name = m.group(1).lower()
         uuid = m.group(2).lower()
@@ -276,7 +299,8 @@ def truncate(str):
         str = short_vm_name + '-' + short_uuid + suffix
 
     # VMFS UUIDs: e.g. 541822a1-d2dcad52-129a-0025909ac654
-    m = re.match('^(.*)([0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{12})(.*)$', str, re.IGNORECASE)
+    m = re.match('^(.*)([0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{12})(.*)$',
+                 str, re.IGNORECASE)
     if m:
         before = m.group(1).lower()
         uuid = m.group(2).lower()
@@ -296,6 +320,7 @@ def truncate(str):
     str = str.replace('datastore', 'ds')
 
     return str
+
 
 def create_environment(config):
     """
@@ -332,16 +357,16 @@ def create_environment(config):
             'vm_counter_ids': [<ID>, <ID>, ...],
         }
     """
-    
+
     if config.get('verify_cert'):
         ssl._create_default_https_context = ssl._create_unverified_context
     # Connect to vCenter Server
-    serviceInstance = SmartConnect(host = config.get("host"), user = config.get("username"), pwd = config.get("password"))
+    serviceInstance = SmartConnect(host=config.get("host"), user=config.get("username"), pwd=config.get("password"))
 
     # If we could not connect abort here
     if not serviceInstance:
         print("Could not connect to the specified host using specified "
-             "username and password")
+              "username and password")
         return -1
 
     # Set up the environment. We fill in the rest afterwards.
@@ -354,20 +379,22 @@ def create_environment(config):
 
     # We need at least one host and one virtual machine, which are poweredOn, in
     # the vCenter to be able to fetch the Counter IDs and establish the lookup table.
-    
+
     # Fetch the Counter IDs
     filteredCounterIds = []
     for perfCounter in performanceManager.perfCounter:
         counterKey = perfCounter.groupInfo.key + "." + perfCounter.nameInfo.key;
-        if counterKey in config['vm_counters'] + config['host_counters'] :
+        if counterKey in config['vm_counters'] + config['host_counters']:
             filteredCounterIds.append(perfCounter.key)
-    
+
     host = None
     vm = None
     for child in serviceInstance.RetrieveServiceContent().rootFolder.childEntity:
         if child._wsdlName == "Datacenter":
             for hostFolderChild in child.hostFolder.childEntity:
-                host = hostFolderChild.host[0] if ((len(hostFolderChild.host) != 0) and hostFolderChild.host[0].summary.runtime.powerState == vim.HostSystem.PowerState.poweredOn) else host
+                host = hostFolderChild.host[0] if (
+                    (len(hostFolderChild.host) != 0) and hostFolderChild.host[
+                        0].summary.runtime.powerState == vim.HostSystem.PowerState.poweredOn) else host
                 if (vm != None and host != None):
                     break
             vmList = child.vmFolder.childEntity
@@ -381,11 +408,13 @@ def create_environment(config):
                     vmList += tmp.childEntity
                 elif tmp._wsdlName == "VirtualApp":
                     vmList += tmp.vm
-    if(host == None):
-        collectd.info("create_environment: vCenter " + config.get("name") + " does not contain any hosts. Cannot continue")
+    if (host == None):
+        collectd.info("create_environment: vCenter " + config.get(
+            "name") + " does not contain any hosts. Cannot continue")
         return
-    if(vm == None):
-        collectd.info("create_environment: vCenter " + config.get("name") + " does not contain any VMs. Cannot continue")
+    if (vm == None):
+        collectd.info("create_environment: vCenter " + config.get(
+            "name") + " does not contain any VMs. Cannot continue")
         return
 
     # Get all queryable aggregated and realtime metrics for an entity
@@ -398,25 +427,35 @@ def create_environment(config):
     performanceManager.UpdatePerfInterval(perfI);
 
     # Query aggregated qureyable mertics for host and vm
-    env['lookup_host'] += performanceManager.QueryAvailablePerfMetric(host, None, None, perfI.samplingPeriod)
-    env['lookup_vm'] += performanceManager.QueryAvailablePerfMetric(vm, None, None, perfI.samplingPeriod)
+    env['lookup_host'] += performanceManager.QueryAvailablePerfMetric(host,
+                                                                      None,
+                                                                      None,
+                                                                      perfI.samplingPeriod)
+    env['lookup_vm'] += performanceManager.QueryAvailablePerfMetric(vm, None,
+                                                                    None,
+                                                                    perfI.samplingPeriod)
     # Query aggregated realtime mertics for host and vm
-    env['lookup_host'] += performanceManager.QueryAvailablePerfMetric(host, None, None, 20)
-    env['lookup_vm'] += performanceManager.QueryAvailablePerfMetric(vm, None, None, 20)
+    env['lookup_host'] += performanceManager.QueryAvailablePerfMetric(host,
+                                                                      None,
+                                                                      None, 20)
+    env['lookup_vm'] += performanceManager.QueryAvailablePerfMetric(vm, None,
+                                                                    None, 20)
 
     # Now use the lookup tables to find out the IDs of the counter names given
     # via the configuration and store them as an array in the environment.
     # If host_counters or vm_counters is empty, select all.
     env['host_counter_ids'] = []
     if len(config['host_counters']) == 0:
-        collectd.info("create_environment: configured to grab all host counters")
+        collectd.info(
+            "create_environment: configured to grab all host counters")
         env['host_counter_ids'] = env['lookup_host']
     else:
         for metric in env['lookup_host']:
             if metric.counterId in filteredCounterIds:
                 env['host_counter_ids'].append(metric)
 
-    collectd.info("create_environment: configured to grab %d host counters" % (len(env['host_counter_ids'])))
+    collectd.info("create_environment: configured to grab %d host counters" % (
+        len(env['host_counter_ids'])))
 
     env['vm_counter_ids'] = []
     if len(config['vm_counters']) == 0:
@@ -426,9 +465,11 @@ def create_environment(config):
             if metric.counterId in filteredCounterIds:
                 env['vm_counter_ids'].append(metric)
 
-    collectd.info("create_environment: configured to grab %d vm counters" % (len(env['vm_counter_ids'])))
+    collectd.info("create_environment: configured to grab %d vm counters" % (
+        len(env['vm_counter_ids'])))
 
     return env
+
 
 ################################################################################
 # COLLECTD REGISTRATION
@@ -436,5 +477,5 @@ def create_environment(config):
 
 collectd.register_config(configure_callback)
 collectd.register_init(init_callback)
-collectd.register_read(callback = read_callback, interval = INTERVAL)
+collectd.register_read(callback=read_callback, interval=INTERVAL)
 collectd.register_shutdown(shutdown_callback)

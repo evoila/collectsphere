@@ -8,11 +8,13 @@ initialize the plugin as collectd would.
 
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
 
+import sys
 import time
+
 import collectsphere
 from collectd import Conf
-import sys   
- 
+
+
 def main():
     """ The plugin is initialized and executed once. This is intended for test
     and dev and measures execution times. """
@@ -31,29 +33,30 @@ def main():
     children.append(Conf('VM_Counters', ('cpu.usage,mem.usage',)))
     children.append(Conf('Inventory_Refresh_Interval', ('600',)))
     conf = Conf(None, None, children)
-    
+
     # Configure and initialize the plugin
     start_time = time.time()
-    
+
     collectsphere.configure_callback(conf)
     collectsphere.init_callback()
-    
-    elapsed_time = time.time() - start_time      
-    sys.stderr.write("Conf/Init Time: " + str(elapsed_time) + "\n")    
+
+    elapsed_time = time.time() - start_time
+    sys.stderr.write("Conf/Init Time: " + str(elapsed_time) + "\n")
 
     # sleep 10sec to give the inventory watch dog some time to refresh the inventory tree
     time.sleep(10)
 
     while True:
         # Execute the plugin once
-        start_time = time.time() 
+        start_time = time.time()
 
         collectsphere.read_callback()
-        
-        elapsed_time = time.time() - start_time      
+
+        elapsed_time = time.time() - start_time
         sys.stderr.write("Read Time: " + str(elapsed_time) + "\n")
 
         time.sleep(60)
+
 
 if __name__ == "__main__":
     main()
