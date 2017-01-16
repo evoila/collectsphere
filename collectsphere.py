@@ -19,6 +19,7 @@ import time
 import ssl
 import re
 import datetime
+import ssl
 
 from pyVim.connect import SmartConnect, Disconnect
 from pyVmomi import vim
@@ -48,6 +49,7 @@ def configure_callback(conf):
     host = None
     port = 443
     verbose = None
+    verify_cert = None
     username = 'root'
     password = 'vmware'
     host_counters = []
@@ -66,6 +68,8 @@ def configure_callback(conf):
             port = int(val[0])
         elif key == 'verbose':
             verbose = bool(val)
+        elif key == 'verifycertificate':
+            verify_cert = bool(val)
         elif key == 'username':
             username = val[0]
         elif key == 'password':
@@ -98,6 +102,7 @@ def configure_callback(conf):
         'host': host,
         'port': port,
         'verbose': verbose,
+        'verify_cert': verify_cert,
         'username': username,
         'password': password,
         'host_counters': host_counters,
@@ -327,7 +332,9 @@ def create_environment(config):
             'vm_counter_ids': [<ID>, <ID>, ...],
         }
     """
-
+    
+    if config.get('verify_cert'):
+        ssl._create_default_https_context = ssl._create_unverified_context
     # Connect to vCenter Server
     serviceInstance = SmartConnect(host = config.get("host"), user = config.get("username"), pwd = config.get("password"))
 

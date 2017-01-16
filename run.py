@@ -24,6 +24,7 @@ def main():
     children.append(Conf('Host', ('FQDN',)))
     children.append(Conf('Port', ('443',)))
     children.append(Conf('Verbose', ('True',)))
+    children.append(Conf('VerifyCertificate', ('True',)))
     children.append(Conf('Username', ('USERNAME',)))
     children.append(Conf('Password', ('PASSWORD',)))
     children.append(Conf('Host_Counters', ('cpu.usage,mem.usage,disk.usage',)))
