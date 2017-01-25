@@ -17,7 +17,7 @@ import re
 import ssl
 import time
 
-from pyVim.connect import SmartConnect
+from pyVim.connect import SmartConnect, Disconnect
 from pyVmomi import vim
 
 import collectd
@@ -164,6 +164,7 @@ def read_callback():
                                 collet_metrics_for_entities(performance_manager,
                                                             env['vm_counter_ids'],
                                                             host.vm, cluster._moId)
+        Disconnect(service_instance)
 
 
 def collet_metrics_for_entities(performance_manager, filtered_metric_ids, entities,
@@ -489,6 +490,8 @@ def create_environment(config):
 
     collectd.info("create_environment: configured to grab %d virtual_machine counters" % (
         len(env['vm_counter_ids'])))
+
+    Disconnect(service_instance)
 
     return env
 
