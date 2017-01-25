@@ -39,6 +39,15 @@ ENVIRONMENT = {}  # Runtime data and object cache
 # IMPLEMENTATION OF COLLECTD CALLBACK FUNCTIONS
 ################################################################################
 
+def convert_folder_tree_to_list(folder_tree):
+    result = list()
+    for leaf in folder_tree:
+        if leaf._wsdlName == "Folder":
+            result.extend(convert_folder_tree_to_list(leaf.childEntity))
+        else:
+            result.append(leaf)
+    return result
+
 def configure_callback(conf):
     """Receive configuration block. This is called by collectd for every
     configuration block it finds for this module."""
@@ -403,7 +412,7 @@ def create_environment(config):
     virtual_machine = None
     for child in service_instance.RetrieveServiceContent().rootFolder.childEntity:
         if child._wsdlName == "Datacenter":
-            for host_folder_child in child.hostFolder.childEntity:
+            for host_folder_child in convert_folder_tree_to_list(child.hostFolder.childEntity):
                 host = host_folder_child.host[0] if (
                     (len(host_folder_child.host) != 0) and host_folder_child.host[
                         0].summary.runtime.powerState == vim.HostSystem.PowerState.poweredOn
