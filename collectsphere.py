@@ -144,26 +144,27 @@ def read_callback():
         # Walk through all Clusters of Datacenter
         for datacenter in service_instance.RetrieveServiceContent().rootFolder.childEntity:
             if datacenter._wsdlName == "Datacenter":
-                for cluster in datacenter.hostFolder.childEntity:
-                    if cluster._wsdlName == "ClusterComputeResource":
+                for compute_resource in datacenter.hostFolder.childEntity:
+                    if compute_resource._wsdlName == "ComputeResource" or \
+                            compute_resource._wsdlName == "ClusterComputeResource":
 
                         # Walk throug all hosts in cluster, collect its metrics and dispatch them
                         collectd.info(
                             "read_callback: found %d hosts in cluster %s" % (
-                                len(cluster.host), cluster.name))
+                                len(compute_resource.host), compute_resource.name))
                         collet_metrics_for_entities(performance_manager,
                                                     env['host_counter_ids'],
-                                                    cluster.host, cluster._moId)
+                                                    compute_resource.host, compute_resource._moId)
 
                         # Walk throug all vms in host, collect its metrics and dispatch them
-                        for host in cluster.host:
+                        for host in compute_resource.host:
                             if host._wsdlName == "HostSystem":
                                 collectd.info(
                                     "read_callback: found %d vms in host %s" % (
                                         len(host.vm), host.name))
                                 collet_metrics_for_entities(performance_manager,
                                                             env['vm_counter_ids'],
-                                                            host.vm, cluster._moId)
+                                                            host.vm, compute_resource._moId)
         Disconnect(service_instance)
 
 
@@ -254,14 +255,15 @@ def collet_metrics_for_entities(performance_manager, filtered_metric_ids, entiti
                 if rollup_type == vim.PerformanceManager.CounterInfo.RollupType.maximum:
                     print ""
                 rollup_type = truncate(rollup_type)
-                type_instance_str = cluster_name + "." \
-                                    + entities[metrics_of_entities_number]._wsdlName + "." \
-                                    + entities[metrics_of_entities_number]._moId + "." \
-                                    + group + "." \
-                                    + instance + "." \
-                                    + rollup_type + "." \
-                                    + counter + "." \
-                                    + unit
+                type_instance_str = \
+                    cluster_name + "." \
+                    + entities[metrics_of_entities_number]._wsdlName + "." \
+                    + entities[metrics_of_entities_number]._moId + "." \
+                    + group + "." \
+                    + instance + "." \
+                    + rollup_type + "." \
+                    + counter + "." \
+                    + unit
                 type_instance_str = type_instance_str.replace(' ', '_')
 
                 # now dispatch to collectd
