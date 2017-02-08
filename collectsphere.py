@@ -16,6 +16,7 @@ import datetime
 import re
 import ssl
 import time
+import tzlocal
 
 from pyVim.connect import SmartConnect, Disconnect
 from pyVmomi import vim
@@ -161,7 +162,8 @@ def read_callback():
                         collectd.info(
                             "read_callback: found %d hosts in cluster %s" % (
                                 len(compute_resource.host), compute_resource.name))
-                        collet_metrics_for_entities(performance_manager,
+                        collet_metrics_for_entities(service_instance,
+                                                    performance_manager,
                                                     env['host_counter_ids'],
                                                     compute_resource.host, compute_resource._moId)
 
@@ -171,14 +173,15 @@ def read_callback():
                                 collectd.info(
                                     "read_callback: found %d vms in host %s" % (
                                         len(host.vm), host.name))
-                                collet_metrics_for_entities(performance_manager,
+                                collet_metrics_for_entities(service_instance,
+                                                            performance_manager,
                                                             env['vm_counter_ids'],
                                                             host.vm, compute_resource._moId)
         Disconnect(service_instance)
 
 
-def collet_metrics_for_entities(performance_manager, filtered_metric_ids, entities,
-                                cluster_name):
+def collet_metrics_for_entities(service_instance, performance_manager, filtered_metric_ids,
+                                entities, cluster_name):
     # Definition of the queries for getting performance data from vCenter
     query_specs = []
     query_spec = vim.PerformanceManager.QuerySpec()
@@ -186,8 +189,8 @@ def collet_metrics_for_entities(performance_manager, filtered_metric_ids, entiti
     query_spec.format = "normal"
     # Define the default time range in which the data should be collected (from
     # now to INTERVAL seconds)
-    end_time = datetime.datetime.today()
-    start_time = datetime.datetime.today() - datetime.timedelta(seconds=INTERVAL)
+    end_time = service_instance.CurrentTime()
+    start_time = end_time - datetime.timedelta(seconds=INTERVAL)
     query_spec.endTime = end_time
     query_spec.startTime = start_time
     # Define the interval, in seconds, for the performance statistics. This
@@ -244,9 +247,8 @@ def collet_metrics_for_entities(performance_manager, filtered_metric_ids, entiti
                 timestamp = float(time.mktime(
                     metrics_of_entities[metrics_of_entities_number]
                     .sampleInfo[metric_value_number]
-                    .timestamp.timetuple()
+                    .timestamp.astimezone(tzlocal.get_localzone()).timetuple()
                 ))
-                timestamp += time.localtime().tm_isdst * (3600)
                 cd_value.time = timestamp
 
                 # truncate

@@ -1,2 +1,3 @@
 pyVmomi
 setuptools
+tzlocal
