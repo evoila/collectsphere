@@ -184,26 +184,29 @@ def collet_metrics_for_entities(service_instance, performance_manager, filtered_
                                 entities, cluster_name):
     # Definition of the queries for getting performance data from vCenter
     query_specs = []
-    query_spec = vim.PerformanceManager.QuerySpec()
-    query_spec.metricId = filtered_metric_ids
-    query_spec.format = "normal"
+
     # Define the default time range in which the data should be collected (from
     # now to INTERVAL seconds)
     end_time = service_instance.CurrentTime()
     start_time = end_time - datetime.timedelta(seconds=INTERVAL)
-    query_spec.endTime = end_time
-    query_spec.startTime = start_time
-    # Define the interval, in seconds, for the performance statistics. This
-    # means for any entity and any metric there will be
-    # INTERVAL / query_spec.intervalId values collected. Leave blank or use
-    # performanceManager.historicalInterval[i].samplingPeriod for
-    # aggregated values
-    query_spec.intervalId = 20
+
+
 
     # For any entity there has to be an own query.
     if len(entities) == 0:
         return
     for entity in entities:
+        query_spec = vim.PerformanceManager.QuerySpec()
+        query_spec.metricId = filtered_metric_ids
+        query_spec.format = "normal"
+        query_spec.endTime = end_time
+        query_spec.startTime = start_time
+        # Define the interval, in seconds, for the performance statistics. This
+        # means for any entity and any metric there will be
+        # INTERVAL / query_spec.intervalId values collected. Leave blank or use
+        # performanceManager.historicalInterval[i].samplingPeriod for
+        # aggregated values
+        query_spec.intervalId = 20
         query_spec.entity = entity
         query_specs.append(query_spec)
 
