@@ -76,9 +76,9 @@ def configure_callback(conf):
         elif key == 'port':
             port = int(val[0])
         elif key == 'verbose':
-            verbose = bool(val)
+            verbose = bool(val[0])
         elif key == 'verifycertificate':
-            verify_cert = bool(val)
+            verify_cert = bool(val[0])
         elif key == 'username':
             username = val[0]
         elif key == 'password':
@@ -383,7 +383,7 @@ def create_environment(config):
         }
     """
 
-    if config.get('verify_cert'):
+    if not config.get('verify_cert'):
         ssl._create_default_https_context = ssl._create_unverified_context
     # Connect to vCenter Server
     service_instance = SmartConnect(host=config.get("host"), user=config.get("username"),
