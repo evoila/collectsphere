@@ -29,6 +29,7 @@ def main():
     children.append(Conf('VerifyCertificate', ('True',)))
     children.append(Conf('Username', ('USERNAME',)))
     children.append(Conf('Password', ('PASSWORD',)))
+    children.append(Conf('UseFriendlyName', ('False',)))
     children.append(Conf('Host_Counters', ('cpu.usage,mem.usage,disk.usage',)))
     children.append(Conf('VM_Counters', ('cpu.usage,mem.usage',)))
     children.append(Conf('Inventory_Refresh_Interval', ('600',)))

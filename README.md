@@ -9,6 +9,9 @@ Run
 This would install the collectsphere module. Add the `collectsphere.conf ` in the including collect configuration folder
 or add this to the collectd configuration file:
 ```
+TypesDB "./vmware.types.db"
+
+
 <LoadPlugin "python">
     Globals true
 </LoadPlugin>
@@ -19,8 +22,9 @@ or add this to the collectd configuration file:
         Name "SOME_NAME"
         Host "FQDN"
         Port "443"
-        Verbose "True"
-        VerifyCertificate "True"
+        Verbose true
+        VerifyCertificate true
+        UseFriendlyName false
         Username "USERNAME"
         Password "PASSWORD"
         Host_Counters "cpu.usage,mem.usage,disk.usage"
@@ -28,6 +32,8 @@ or add this to the collectd configuration file:
     </Module>
 </Plugin>
 ```
+Please note there is a sepcial TypesDB for collectsphere. Change the path in the first line to the `vmware.types.db` file.
+
 
 
 ## Configuration
@@ -35,11 +41,24 @@ Key | Description
  --- | ---
 **Name** | The `Name` is a name for the environment. At the moment this is only used for internal usage.
 **Host** | The `Host` is the FQDN of the vSphere or an IP, e.g. *vsphere.local* or *10.0.0.10*. 
-**Port** | The Port is the same port as the vSphere web client access port.
-**VerifyCertificate** | When using self-signed certificates set this option to False
+**Port** | The `Port is the same port as the vSphere web client access port.
+**VerifyCertificate** | When using self-signed certificates set this option to false
+**UseFriendlyName** | Instead of the internal VMware Managed Object ID, you can use friendly names, which are the names of the entity for mnonitoring. <br> *Be careful, when instances have the same name, they could not divided anymore*
 **Username** | A user with `System.View` privileges.
 **Password** | Password for user authentication
 **Counters** | ;TBD
+
+### Graphite
+If you use the [write_graphite](https://collectd.org/documentation/manpages/collectd.conf.5.shtml#plugin_write_graphite)-plugin of collectd, it is helpful to use the following configuration with it:
+```
+EscapeCharacter "."
+SeparateInstances true
+```
+## Naming schema
+We are using the following naming schema for the type in collectsphere:
+`< collectsphere_host >/collectsphere/< VMware-Type in vmware.types.db >-< Cluster >.< Host|VM >.< metric-instance >`
+All non alphamerically chars would be replaced with undescore.
+For more information see [collectd Naming schema](https://collectd.org/wiki/index.php/Naming_schema)
 
 ## Features
 - Fetch ESXi host metrics

@@ -1,8 +1,8 @@
 """
 This is the code that needs to be integrated into collectd when run in
 production. It contains the python code that integrates into the python module
-for collectd. It connects to one or more vCenter Servers and gathers the configured
-metrics from ESXi hosts and Virtual Machines.
+for collectd. It connects to one or more vCenter Servers and gathers the
+configured metrics from ESXi hosts and Virtual Machines.
 
 The file is organized in multiple sections. The first section implements the
 callback functions executed be collectd which is followed be a couple of helper
@@ -22,7 +22,6 @@ from pyVim.connect import SmartConnect, Disconnect
 from pyVmomi import vim
 
 import collectd
-
 
 ################################################################################
 # CONFIGURE ME
@@ -49,6 +48,7 @@ def convert_folder_tree_to_list(folder_tree):
             result.append(leaf)
     return result
 
+
 def configure_callback(conf):
     """Receive configuration block. This is called by collectd for every
     configuration block it finds for this module."""
@@ -59,8 +59,9 @@ def configure_callback(conf):
     port = 443
     verbose = None
     verify_cert = None
-    username = 'root'
-    password = 'vmware'
+    use_friendly_name = None
+    username = None
+    password = None
     host_counters = []
     vm_counters = []
     inventory_refresh_interval = 600
@@ -79,21 +80,23 @@ def configure_callback(conf):
             verbose = bool(val[0])
         elif key == 'verifycertificate':
             verify_cert = bool(val[0])
+        elif key == 'usefriendlyname':
+            use_friendly_name = bool(val[0])
         elif key == 'username':
             username = val[0]
         elif key == 'password':
             password = val[0]
         elif key == 'host_counters':
-            str = val[0]
-            if not str == "all":
-                values = str.split(',')
+            host_counters = val[0]
+            if not host_counters == "all":
+                values = host_counters.split(',')
                 for value in values:
                     if len(value) > 0:
                         host_counters.append(value.strip())
         elif key == 'vm_counters':
-            str = val[0]
-            if not str == "all":
-                values = str.split(',')
+            vm_counters = val[0]
+            if not vm_counters == "all":
+                values = vm_counters.split(',')
                 for value in values:
                     if len(value) > 0:
                         vm_counters.append(value.strip())
@@ -104,10 +107,16 @@ def configure_callback(conf):
                              % key)
             continue
 
-    collectd.info(
-        'configure_callback: Loaded config: name=%s, host=%s, port=%s, verbose=%s, username=%s, password=%s, host_metrics=%s, vm_metrics=%s, inventory_refresh_interval=%s' % (
+    log_message = \
+        'configure_callback: Loaded config: name=%s, host=%s, port=%s, ' \
+        'verbose=%s, username=%s, password=%s, host_metrics=%s, ' \
+        'vm_metrics=%s, inventory_refresh_interval=%s' % (
             name, host, port, verbose, username, "******", len(host_counters),
-            len(vm_counters), inventory_refresh_interval))
+            len(vm_counters), inventory_refresh_interval
+        )
+    collectd.info(
+        log_message
+    )
 
     CONFIGS.append({
         'name': name,
@@ -115,6 +124,7 @@ def configure_callback(conf):
         'port': port,
         'verbose': verbose,
         'verify_cert': verify_cert,
+        'use_friendly_name': use_friendly_name,
         'username': username,
         'password': password,
         'host_counters': host_counters,
@@ -148,40 +158,75 @@ def read_callback():
         collectd.info("read_callback: entering environment: " + name)
 
         # Connects to vCenter Server
-        service_instance = SmartConnect(host=env["host"], user=env["username"], pwd=env["password"])
-        performance_manager = service_instance.RetrieveServiceContent().perfManager
+        service_instance = SmartConnect(
+            host=env["host"], user=env["username"], pwd=env["password"]
+        )
+        performance_manager = service_instance \
+            .RetrieveServiceContent() \
+            .perfManager
 
         # Walk through all Clusters of Datacenter
-        for datacenter in service_instance.RetrieveServiceContent().rootFolder.childEntity:
+        for datacenter in service_instance \
+                .RetrieveServiceContent() \
+                .rootFolder.childEntity:
             if datacenter._wsdlName == "Datacenter":
                 for compute_resource in datacenter.hostFolder.childEntity:
-                    if compute_resource._wsdlName == "ComputeResource" or \
-                            compute_resource._wsdlName == "ClusterComputeResource":
-
-                        # Walk throug all hosts in cluster, collect its metrics and dispatch them
+                    if compute_resource._wsdlName == \
+                            "ComputeResource" \
+                            or compute_resource._wsdlName == \
+                                    "ClusterComputeResource":
+                        cluster_name = \
+                            compute_resource.name if env['use_friendly_name'] \
+                                else compute_resource._moId
+                        # Walk throug all hosts in cluster, collect its metrics
+                        # and dispatch them
                         collectd.info(
                             "read_callback: found %d hosts in cluster %s" % (
-                                len(compute_resource.host), compute_resource.name))
-                        collet_metrics_for_entities(service_instance,
-                                                    performance_manager,
-                                                    env['host_counter_ids'],
-                                                    compute_resource.host, compute_resource._moId)
+                                len(compute_resource.host),
+                                compute_resource.name
+                            )
+                        )
+                        collet_metrics_for_entities(
+                            service_instance,
+                            performance_manager,
+                            env['host_counter_ids'],
+                            compute_resource.host,
+                            cluster_name,
+                            env
+                        )
 
-                        # Walk throug all vms in host, collect its metrics and dispatch them
+                        # Walk throug all vms in host, collect its metrics and
+                        # dispatch them
                         for host in compute_resource.host:
                             if host._wsdlName == "HostSystem":
                                 collectd.info(
                                     "read_callback: found %d vms in host %s" % (
-                                        len(host.vm), host.name))
-                                collet_metrics_for_entities(service_instance,
-                                                            performance_manager,
-                                                            env['vm_counter_ids'],
-                                                            host.vm, compute_resource._moId)
+                                        len(host.vm), host.name
+                                    )
+                                )
+                                collet_metrics_for_entities(
+                                    service_instance,
+                                    performance_manager,
+                                    env['vm_counter_ids'],
+                                    host.vm,
+                                    cluster_name,
+                                    env
+                                )
         Disconnect(service_instance)
 
 
-def collet_metrics_for_entities(service_instance, performance_manager, filtered_metric_ids,
-                                entities, cluster_name):
+def shutdown_callback():
+    """ Called by collectd on shutdown. """
+    pass
+
+
+################################################################################
+# HELPER FUNCTIONS
+################################################################################
+
+def collet_metrics_for_entities(service_instance, performance_manager,
+                                filtered_metric_ids, entities, cluster_name,
+                                env):
     # Definition of the queries for getting performance data from vCenter
     query_specs = []
 
@@ -189,8 +234,6 @@ def collet_metrics_for_entities(service_instance, performance_manager, filtered_
     # now to INTERVAL seconds)
     end_time = service_instance.CurrentTime()
     start_time = end_time - datetime.timedelta(seconds=INTERVAL)
-
-
 
     # For any entity there has to be an own query.
     if len(entities) == 0:
@@ -216,11 +259,10 @@ def collet_metrics_for_entities(service_instance, performance_manager, filtered_
     metrics_of_entities = performance_manager.QueryPerf(query_specs)
 
     cd_value = collectd.Values(plugin="collectsphere")
-    cd_value.type = "gauge"
-
     # Walk throug all entites of query
     for metrics_of_entities_number in range(len(metrics_of_entities)):
-        metrics_of_entity = metrics_of_entities[metrics_of_entities_number].value
+        metrics_of_entity = metrics_of_entities[
+            metrics_of_entities_number].value
 
         # For every queried metric per entity, get an array consisting of
         # performance counter information for the specified counterIds.
@@ -233,7 +275,6 @@ def collet_metrics_for_entities(service_instance, performance_manager, filtered_
         # Walk thorug all queried metrics per entity
         for metrics_of_entity_number in range(len(metrics_of_entity)):
             metric = metrics_of_entity[metrics_of_entity_number]
-
             perf_counter_info = perf_counter_info_list[metrics_of_entity_number]
             counter = perf_counter_info.nameInfo.key
             group = perf_counter_info.groupInfo.key
@@ -241,7 +282,8 @@ def collet_metrics_for_entities(service_instance, performance_manager, filtered_
             unit = perf_counter_info.unitInfo.key
             rollup_type = perf_counter_info.rollupType
 
-            # Walk throug all values of a metric (INTERVAL / query_spec.intervalId values)
+            # Walk throug all values of a metric
+            # (INTERVAL / query_spec.intervalId values)
             for metric_value_number in range(len(metric.value)):
                 value = float(metric.value[metric_value_number])
 
@@ -249,102 +291,47 @@ def collet_metrics_for_entities(service_instance, performance_manager, filtered_
                 # has to be add an hour if you're at DST
                 timestamp = float(time.mktime(
                     metrics_of_entities[metrics_of_entities_number]
-                    .sampleInfo[metric_value_number]
-                    .timestamp.astimezone(tzlocal.get_localzone()).timetuple()
+                        .sampleInfo[metric_value_number]
+                        .timestamp.astimezone(
+                        tzlocal.get_localzone()
+                    ).timetuple()
                 ))
                 cd_value.time = timestamp
 
-                # truncate
-                instance = truncate(instance)
                 # When the instance value is empty, the vSphere API references a
                 # total. Example: A host has multiple cores for each of which we
                 # get a single stat object. An additional stat object will be
-                # returned by the vSphere API with an empty string for "instance".
+                # returned by the vSphere API with an empty string for
+                # "instance".
                 # This is the overall value accross all logical CPUs.
                 # if(len(stat.instance.strip()) == 0):
                 #   instance = 'all'
                 instance = "all" if instance == "" else instance
-                unit = truncate(unit)
-                group = truncate(group)
-                if rollup_type == vim.PerformanceManager.CounterInfo.RollupType.maximum:
-                    print ""
-                rollup_type = truncate(rollup_type)
                 type_instance_str = \
-                    cluster_name + "." \
-                    + entities[metrics_of_entities_number]._wsdlName + "." \
-                    + entities[metrics_of_entities_number]._moId + "." \
-                    + group + "." \
-                    + instance + "." \
-                    + rollup_type + "." \
-                    + counter + "." \
-                    + unit
-                type_instance_str = type_instance_str.replace(' ', '_')
+                    cluster_name + "." + re.sub(
+                        pattern=r'[^A-Za-z0-9_]',
+                        repl='_',
+                        string=
+                        (
+                            entities[metrics_of_entities_number].name
+                            if env['use_friendly_name']
+                            else
+                            entities[metrics_of_entities_number]._moId
+                        )
+                    ) + "." + instance
 
                 # now dispatch to collectd
+                collectd.info("dispatch " + str(
+                    timestamp) + "\t" + type_instance_str + "\t" + str(value))
+                cd_value.type = re.sub(
+                    pattern=r'[^A-Za-z0-9_]',
+                    repl='_',
+                    string=
+                    entities[metrics_of_entities_number]._wsdlName
+                ) + "." + group + "." + rollup_type + "." + counter + "." + unit
                 cd_value.dispatch(time=timestamp,
                                   type_instance=type_instance_str,
                                   values=[value])
-
-
-def shutdown_callback():
-    """ Called by collectd on shutdown. """
-    pass
-
-
-################################################################################
-# HELPER FUNCTIONS
-################################################################################
-
-
-def truncate(string):
-    """ We are limited to 63 characters for the type_instance field. This
-    function truncates names in a sensible way """
-
-    # NAA/T10 Canonical Names
-    match = re.match('(naa|t10)\.(.+)', string, re.IGNORECASE)
-    if match:
-        id_type = match.group(1).lower()
-        identifier = match.group(2).lower()
-        if identifier.startswith('ATA'):
-            second_match = re.match('ATA_+(.+?)_+(.+?)_+', identifier, re.IGNORECASE)
-            identifier = second_match.group(1) + second_match.group(2)
-        else:
-            string = id_type + identifier[-12:]
-
-    # vCloud Director naming pattern
-    match = re.match(
-        '^(.*)\s\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)(.*)$',
-        string, re.IGNORECASE)
-    if match:
-        vm_name = match.group(1).lower()
-        uuid = match.group(2).lower()
-        suffix = match.group(3).lower()
-        short_vm_name = vm_name[:6]
-        short_uuid = uuid[:6]
-        string = short_vm_name + '-' + short_uuid + suffix
-
-    # VMFS UUIDs: e.g. 541822a1-d2dcad52-129a-0025909ac654
-    match = re.match('^(.*)([0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{12})(.*)$',
-                     string, re.IGNORECASE)
-    if match:
-        before = match.group(1).lower()
-        uuid = match.group(2).lower()
-        after = match.group(3).lower()
-        short_uuid = uuid[:12]
-        string = before + short_uuid + after
-
-    # truncate units
-    string = string.replace('millisecond', 'ms')
-    string = string.replace('percent', 'perc')
-    string = string.replace('number', 'num')
-    string = string.replace('kiloBytesPerSecond', 'KBps')
-    string = string.replace('kiloBytes', 'KB')
-    string = string.replace('megaBytes', 'MB')
-
-    # truncate groups
-    string = string.replace('datastore', 'ds')
-
-    return string
 
 
 def create_environment(config):
@@ -386,7 +373,8 @@ def create_environment(config):
     if not config.get('verify_cert'):
         ssl._create_default_https_context = ssl._create_unverified_context
     # Connect to vCenter Server
-    service_instance = SmartConnect(host=config.get("host"), user=config.get("username"),
+    service_instance = SmartConnect(host=config.get("host"),
+                                    user=config.get("username"),
                                     pwd=config.get("password"))
 
     # If we could not connect abort here
@@ -400,34 +388,46 @@ def create_environment(config):
     env["host"] = config.get("host")
     env["username"] = config.get("username")
     env["password"] = config.get("password")
-
+    env['use_friendly_name'] = config.get('use_friendly_name')
     performance_manager = service_instance.RetrieveServiceContent().perfManager
 
     # We need at least one host and one virtual machine, which are poweredOn, in
-    # the vCenter to be able to fetch the Counter IDs and establish the lookup table.
+    # the vCenter to be able to fetch the Counter IDs and establish the lookup
+    # table.
 
     # Fetch the Counter IDs
     filtered_counter_ids = []
     for perf_counter in performance_manager.perfCounter:
-        counter_key = perf_counter.groupInfo.key + "." + perf_counter.nameInfo.key
+        counter_key = \
+            perf_counter.groupInfo.key + "." + perf_counter.nameInfo.key
         if counter_key in config['vm_counters'] + config['host_counters']:
             filtered_counter_ids.append(perf_counter.key)
 
     host = None
     virtual_machine = None
-    for child in service_instance.RetrieveServiceContent().rootFolder.childEntity:
+    for child in service_instance \
+            .RetrieveServiceContent() \
+            .rootFolder.childEntity:
         if child._wsdlName == "Datacenter":
-            for host_folder_child in convert_folder_tree_to_list(child.hostFolder.childEntity):
+            for host_folder_child in convert_folder_tree_to_list(
+                    child.hostFolder.childEntity
+            ):
                 host = host_folder_child.host[0] if (
-                    (len(host_folder_child.host) != 0) and host_folder_child.host[
-                        0].summary.runtime.powerState == vim.HostSystem.PowerState.poweredOn
+                    (len(host_folder_child.host) != 0) and
+                    host_folder_child
+                    .host[0]
+                    .summary
+                    .runtime
+                    .powerState
+                    == vim.HostSystem.PowerState.poweredOn
                 ) else host
                 if virtual_machine is not None and host is None:
                     break
             vm_list = child.vmFolder.childEntity
             for tmp in vm_list:
                 if tmp._wsdlName == "VirtualMachine":
-                    if tmp.summary.runtime.powerState == vim.VirtualMachine.PowerState.poweredOn:
+                    if tmp.summary.runtime.powerState == \
+                            vim.VirtualMachine.PowerState.poweredOn:
                         virtual_machine = tmp
                         if virtual_machine is not None and host is not None:
                             break
@@ -490,6 +490,7 @@ def create_environment(config):
         env['host_counter_ids'] = env['lookup_host']
     else:
         for metric in env['lookup_host']:
+
             if metric.counterId in filtered_counter_ids:
                 env['host_counter_ids'].append(metric)
 
@@ -504,8 +505,9 @@ def create_environment(config):
             if metric.counterId in filtered_counter_ids:
                 env['vm_counter_ids'].append(metric)
 
-    collectd.info("create_environment: configured to grab %d virtual_machine counters" % (
-        len(env['vm_counter_ids'])))
+    collectd.info(
+        "create_environment: configured to grab %d virtual_machine counters" % (
+            len(env['vm_counter_ids'])))
 
     Disconnect(service_instance)
 
