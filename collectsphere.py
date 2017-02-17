@@ -87,16 +87,16 @@ def configure_callback(conf):
         elif key == 'password':
             password = val[0]
         elif key == 'host_counters':
-            host_counters = val[0]
-            if not host_counters == "all":
-                values = host_counters.split(',')
+            counters = val[0]
+            if not counters == "all":
+                values = counters.split(',')
                 for value in values:
                     if len(value) > 0:
                         host_counters.append(value.strip())
         elif key == 'vm_counters':
-            vm_counters = val[0]
-            if not vm_counters == "all":
-                values = vm_counters.split(',')
+            counters = val[0]
+            if not counters == "all":
+                values = counters.split(',')
                 for value in values:
                     if len(value) > 0:
                         vm_counters.append(value.strip())
@@ -256,47 +256,57 @@ def collet_metrics_for_entities(service_instance, performance_manager,
     # Retrieves the performance metrics for the specified entity (or entities)
     # based on the properties specified in the query_specs
     collectd.info("GetMetricsForEntities: collecting its stats")
-    metrics_of_entities = performance_manager.QueryPerf(query_specs)
+    perf_entity_metrics = performance_manager.QueryPerf(query_specs)
 
     cd_value = collectd.Values(plugin="collectsphere")
     # Walk throug all entites of query
-    for metrics_of_entities_number in range(len(metrics_of_entities)):
-        metrics_of_entity = metrics_of_entities[
-            metrics_of_entities_number].value
+
+    # for perf_entity_metric in perf_entity_metrics:
+    for perf_entity_metric_count in range(len(perf_entity_metrics)):
+        perf_entity_metric = perf_entity_metrics[perf_entity_metric_count]
+        perf_sample_infos = perf_entity_metric.sampleInfo
+        perf_metric_series_list = perf_entity_metric.value
 
         # For every queried metric per entity, get an array consisting of
         # performance counter information for the specified counterIds.
         queried_counter_ids_per_entity = []
-        for metric in metrics_of_entity:
-            queried_counter_ids_per_entity.append(metric.id.counterId)
+        for perf_metric_series in perf_metric_series_list:
+            queried_counter_ids_per_entity.append(
+                perf_metric_series.id.counterId)
         perf_counter_info_list = performance_manager.QueryPerfCounter(
             queried_counter_ids_per_entity)
 
-        # Walk thorug all queried metrics per entity
-        for metrics_of_entity_number in range(len(metrics_of_entity)):
-            metric = metrics_of_entity[metrics_of_entity_number]
-            perf_counter_info = perf_counter_info_list[metrics_of_entity_number]
+        instances = list()
+
+        # for perf_metric_series in perf_metric_series_list:
+        for perf_metric_series_count in range(len(perf_metric_series_list)):
+            perf_metric_series = perf_metric_series_list[
+                perf_metric_series_count]
+            perf_counter_info = perf_counter_info_list[perf_metric_series_count]
             counter = perf_counter_info.nameInfo.key
             group = perf_counter_info.groupInfo.key
-            instance = metric.id.instance
+
             unit = perf_counter_info.unitInfo.key
             rollup_type = perf_counter_info.rollupType
 
-            # Walk throug all values of a metric
-            # (INTERVAL / query_spec.intervalId values)
-            for metric_value_number in range(len(metric.value)):
-                value = float(metric.value[metric_value_number])
+            instance = perf_metric_series.id.instance
+            if instance in instances:
+                continue
+            else:
+                instances.append(instance)
 
-                # Get the timestamp of value. Because of an issue by VMware the
-                # has to be add an hour if you're at DST
+            # for perf_metric in perf_metric_series.value:
+            for perf_metric_count in range(len(perf_metric_series.value)):
+                perf_metric = perf_metric_series.value[perf_metric_count]
+
                 timestamp = float(time.mktime(
-                    metrics_of_entities[metrics_of_entities_number]
-                        .sampleInfo[metric_value_number]
+                    perf_sample_infos[perf_metric_count]
                         .timestamp.astimezone(
                         tzlocal.get_localzone()
                     ).timetuple()
                 ))
-                cd_value.time = timestamp
+
+                entity = entities[perf_entity_metric_count]
 
                 # When the instance value is empty, the vSphere API references a
                 # total. Example: A host has multiple cores for each of which we
@@ -313,25 +323,26 @@ def collet_metrics_for_entities(service_instance, performance_manager,
                         repl='_',
                         string=
                         (
-                            entities[metrics_of_entities_number].name
+                            entity.name
                             if env['use_friendly_name']
                             else
-                            entities[metrics_of_entities_number]._moId
+                            entity._moId
                         )
                     ) + "." + instance
 
                 # now dispatch to collectd
                 collectd.info("dispatch " + str(
-                    timestamp) + "\t" + type_instance_str + "\t" + str(value))
+                    timestamp) + "\t" + type_instance_str + "\t" + str(
+                    long(perf_metric)))
                 cd_value.type = re.sub(
                     pattern=r'[^A-Za-z0-9_]',
                     repl='_',
                     string=
-                    entities[metrics_of_entities_number]._wsdlName
+                    entity._wsdlName
                 ) + "." + group + "." + rollup_type + "." + counter + "." + unit
                 cd_value.dispatch(time=timestamp,
                                   type_instance=type_instance_str,
-                                  values=[value])
+                                  values=[long(perf_metric)])
 
 
 def create_environment(config):
