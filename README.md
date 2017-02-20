@@ -9,7 +9,7 @@ Run
 This would install the collectsphere module. Add the `collectsphere.conf ` in the including collect configuration folder
 or add this to the collectd configuration file:
 ```
-TypesDB "./vmware.types.db"
+TypesDB "./vmware-types.db"
 
 
 <LoadPlugin "python">
