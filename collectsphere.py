@@ -458,24 +458,29 @@ def create_environment(config):
     # Get all queryable aggregated and realtime metrics for an entity
     env['lookup_host'] = []
     env['lookup_vm'] = []
-    performance_interval = performance_manager.historicalInterval[0]
-    performance_interval.level = 2
+    if len(performance_manager.historicalInterval) is not 0:
+        performance_interval = performance_manager.historicalInterval[0]
+        samplingPeriod = performance_interval.samplingPeriod
+        performance_interval.level = 2
 
-    # Update performance interval to get all rolluptypes
-    performance_manager.UpdatePerfInterval(performance_interval)
+        # Update performance interval to get all rolluptypes
+        performance_manager.UpdatePerfInterval(performance_interval)
+
+    else:
+        samplingPeriod = None
 
     # Query aggregated qureyable mertics for host and virtual_machine
     env['lookup_host'] += performance_manager.QueryAvailablePerfMetric(
         host,
         None,
         None,
-        performance_interval.samplingPeriod
+        samplingPeriod
     )
     env['lookup_vm'] += performance_manager.QueryAvailablePerfMetric(
         virtual_machine,
         None,
         None,
-        performance_interval.samplingPeriod
+        samplingPeriod
     )
     # Query aggregated realtime mertics for host and virtual_machine
     env['lookup_host'] += performance_manager.QueryAvailablePerfMetric(

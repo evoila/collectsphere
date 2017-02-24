@@ -40,7 +40,7 @@ Please note there is a sepcial TypesDB for collectsphere. Change the path in the
 Key | Description
  --- | ---
 **Name** | The `Name` is a name for the environment. At the moment this is only used for internal usage.
-**Host** | The `Host` is the FQDN of the vSphere or an IP, e.g. *vsphere.local* or *10.0.0.10*. 
+**Host** | The `Host` is a FQDN or an IP of a vSphere Server or ESX system, e.g. *vsphere.local* or *10.0.0.10*. 
 **Port** | The `Port is the same port as the vSphere web client access port.
 **VerifyCertificate** | When using self-signed certificates set this option to false
 **UseFriendlyName** | Instead of the internal VMware Managed Object ID, you can use friendly names, which are the names of the entity for mnonitoring. <br> *Be careful, when instances have the same name, they could not divided anymore*
