@@ -6,7 +6,7 @@ which makes it suitable for medium to large environments.
 Run
 > python setup.py install
 
-This would install the collectsphere module. Add the `collectsphere.conf ` in the including collect configuration folder
+This would install the collectsphere module. Add the `collectsphere.conf ` in the including collect configuration folder (usually `/etc/collectd.d` )
 or add this to the collectd configuration file:
 ```
 TypesDB "./vmware-types.db"
@@ -32,7 +32,7 @@ TypesDB "./vmware-types.db"
     </Module>
 </Plugin>
 ```
-Please note there is a sepcial TypesDB for collectsphere. Change the path in the first line to the `vmware.types.db` file.
+Please note there is a special TypesDB for collectsphere. Change the path in the first line to the `vmware.types.db` file on your system.
 
 
 
@@ -41,11 +41,11 @@ Key | Description
  --- | ---
 **Name** | The `Name` is a name for the environment. At the moment this is only used for internal usage.
 **Host** | The `Host` is a FQDN or an IP of a vSphere Server or ESX system, e.g. *vsphere.local* or *10.0.0.10*. 
-**Port** | The `Port is the same port as the vSphere web client access port.
+**Port** | The `Port` is the same port as the vSphere web client access port (usually 443 or 9443).
 **VerifyCertificate** | When using self-signed certificates set this option to false
 **UseFriendlyName** | Instead of the internal VMware Managed Object ID, you can use friendly names, which are the names of the entity for mnonitoring. <br> *Be careful, when instances have the same name, they could not divided anymore*
-**Username** | A user with `System.View` privileges.
-**Password** | Password for user authentication
+**Username** | A ESX/Vsphere user with `System.View` and `Performance.ModifyIntervals` privileges.
+**Password** | Password for the above user
 **Counters** | ;TBD
 
 ### Graphite
@@ -57,7 +57,7 @@ SeparateInstances true
 ## Naming schema
 We are using the following naming schema for the type in collectsphere:
 `< collectsphere_host >/collectsphere/< VMware-Type in vmware.types.db >-< Cluster >.< Host|VM >.< metric-instance >`
-All non alphamerically chars would be replaced with undescore.
+All non alphamerically chars would be replaced with underscore.
 For more information see [collectd Naming schema](https://collectd.org/wiki/index.php/Naming_schema)
 
 ## Features
