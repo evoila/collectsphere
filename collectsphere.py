@@ -276,7 +276,7 @@ def collet_metrics_for_entities(service_instance, performance_manager,
         perf_counter_info_list = performance_manager.QueryPerfCounter(
             queried_counter_ids_per_entity)
 
-        instances = list()
+        dispatched_values = list()
 
         # for perf_metric_series in perf_metric_series_list:
         for perf_metric_series_count in range(len(perf_metric_series_list)):
@@ -329,20 +329,30 @@ def collet_metrics_for_entities(service_instance, performance_manager,
                             entity._moId
                         )
                     ) + "." + instance
+                dispatched_value = \
+                    str(timestamp) + type_instance_str + str(perf_metric)
+                if (dispatched_value) in dispatched_values:
+                    continue
+                else:
+                    dispatched_values.append(dispatched_value)
+                    # now dispatch to collectd
+                    collectd.info("dispatch " + str(
+                        timestamp) + "\t" + type_instance_str + "\t" + str(
+                        long(perf_metric)))
+                    cd_value.type = re.sub(
+                        pattern=r'[^A-Za-z0-9_]',
+                        repl='_',
+                        string=
+                        entity._wsdlName
+                    ) \
+                                    + "." + group \
+                                    + "." + rollup_type \
+                                    + "." + counter \
+                                    + "." + unit
 
-                # now dispatch to collectd
-                collectd.info("dispatch " + str(
-                    timestamp) + "\t" + type_instance_str + "\t" + str(
-                    long(perf_metric)))
-                cd_value.type = re.sub(
-                    pattern=r'[^A-Za-z0-9_]',
-                    repl='_',
-                    string=
-                    entity._wsdlName
-                ) + "." + group + "." + rollup_type + "." + counter + "." + unit
-                cd_value.dispatch(time=timestamp,
-                                  type_instance=type_instance_str,
-                                  values=[long(perf_metric)])
+                    cd_value.dispatch(time=timestamp,
+                                      type_instance=type_instance_str,
+                                      values=[long(perf_metric)])
 
 
 def create_environment(config):
