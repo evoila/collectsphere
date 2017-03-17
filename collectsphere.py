@@ -290,10 +290,10 @@ def collet_metrics_for_entities(service_instance, performance_manager,
             rollup_type = perf_counter_info.rollupType
 
             instance = perf_metric_series.id.instance
-            if instance in instances:
-                continue
-            else:
-                instances.append(instance)
+            # if instance in instances:
+            #     continue
+            # else:
+            #     instances.append(counter + "."  + group + "." + instance)
 
             # for perf_metric in perf_metric_series.value:
             for perf_metric_count in range(len(perf_metric_series.value)):
