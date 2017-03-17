@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name='collectsphere',
-    version='1.1.1',
+    version='1.1.2',
     description='VMware performance metric collector for collectd',
     author='evoila GmbH',
     author_email='info@evoila.de',

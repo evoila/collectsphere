@@ -349,10 +349,12 @@ def collet_metrics_for_entities(service_instance, performance_manager,
                                     + "." + rollup_type \
                                     + "." + counter \
                                     + "." + unit
-
-                    cd_value.dispatch(time=timestamp,
-                                      type_instance=type_instance_str,
-                                      values=[long(perf_metric)])
+                    try:
+                        cd_value.dispatch(time=timestamp,
+                                          type_instance=type_instance_str,
+                                          values=[long(perf_metric)])
+                    except Exception:
+                        continue
 
 
 def create_environment(config):
