@@ -420,11 +420,11 @@ def create_environment(config):
 
     # Fetch the Counter IDs
     filtered_counter_ids = []
+    ids_counters_dict = {}
     for perf_counter in performance_manager.perfCounter:
         counter_key = \
             perf_counter.groupInfo.key + "." + perf_counter.nameInfo.key
-        if counter_key in config['vm_counters'] + config['host_counters']:
-            filtered_counter_ids.append(perf_counter.key)
+        ids_counters_dict[perf_counter.key] = counter_key
 
     host = None
     virtual_machine = None
@@ -518,8 +518,7 @@ def create_environment(config):
         env['host_counter_ids'] = env['lookup_host']
     else:
         for metric in env['lookup_host']:
-
-            if metric.counterId in filtered_counter_ids:
+            if ids_counters_dict[metric.counterId] in config['host_counters']:
                 env['host_counter_ids'].append(metric)
 
     collectd.info("create_environment: configured to grab %d host counters" % (
@@ -530,7 +529,7 @@ def create_environment(config):
         env['vm_counter_ids'] = env['lookup_vm']
     else:
         for metric in env['lookup_vm']:
-            if metric.counterId in filtered_counter_ids:
+            if ids_counters_dict[metric.counterId] in config['vm_counters']:
                 env['vm_counter_ids'].append(metric)
 
     collectd.info(
