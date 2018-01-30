@@ -93,6 +93,8 @@ def configure_callback(conf):
                 for value in values:
                     if len(value) > 0:
                         host_counters.append(value.strip())
+            else :
+                host_counters = "all"
         elif key == 'vm_counters':
             counters = val[0]
             if not counters == "all":
@@ -100,6 +102,8 @@ def configure_callback(conf):
                 for value in values:
                     if len(value) > 0:
                         vm_counters.append(value.strip())
+            else:
+                vm_counters = "all"
         elif key == 'inventory_refresh_interval':
             inventory_refresh_interval = int(val[0])
         else:
@@ -186,14 +190,15 @@ def read_callback():
                                 compute_resource.name
                             )
                         )
-                        collet_metrics_for_entities(
-                            service_instance,
-                            performance_manager,
-                            env['host_counter_ids'],
-                            compute_resource.host,
-                            cluster_name,
-                            env
-                        )
+                        if len(env['host_counter_ids']) > 0:
+                            collet_metrics_for_entities(
+                                service_instance,
+                                performance_manager,
+                                env['host_counter_ids'],
+                                compute_resource.host,
+                                cluster_name,
+                                env
+                            )
 
                         # Walk throug all vms in host, collect its metrics and
                         # dispatch them
@@ -204,14 +209,15 @@ def read_callback():
                                         len(host.vm), host.name
                                     )
                                 )
-                                collet_metrics_for_entities(
-                                    service_instance,
-                                    performance_manager,
-                                    env['vm_counter_ids'],
-                                    host.vm,
-                                    cluster_name,
-                                    env
-                                )
+                                if len(env['vm_counter_ids']) > 0:
+                                    collet_metrics_for_entities(
+                                        service_instance,
+                                        performance_manager,
+                                        env['vm_counter_ids'],
+                                        host.vm,
+                                        cluster_name,
+                                        env
+                                    )
         Disconnect(service_instance)
 
 
@@ -512,7 +518,7 @@ def create_environment(config):
     # via the configuration and store them as an array in the environment.
     # If host_counters or vm_counters is empty, select all.
     env['host_counter_ids'] = []
-    if len(config['host_counters']) == 0:
+    if config['host_counters'] == "all":
         collectd.info(
             "create_environment: configured to grab all host counters")
         env['host_counter_ids'] = env['lookup_host']
@@ -525,7 +531,7 @@ def create_environment(config):
         len(env['host_counter_ids'])))
 
     env['vm_counter_ids'] = []
-    if len(config['vm_counters']) == 0:
+    if config['vm_counters'] == "all":
         env['vm_counter_ids'] = env['lookup_vm']
     else:
         for metric in env['lookup_vm']:
